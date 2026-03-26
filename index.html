@@ -3,1500 +3,1654 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CTRL//DBG — Débogueur de Manettes</title>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<title>GamepadLab — Débogueur Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,300&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #080c10;
-    --bg2: #0d1318;
-    --bg3: #111820;
-    --panel: #0f1923;
-    --border: #1e3040;
-    --border2: #243b50;
-    --accent: #00e5ff;
-    --accent2: #00ff88;
-    --accent3: #ff3f5b;
-    --accent4: #ffae00;
-    --text: #cde4f0;
-    --text-dim: #4a7a96;
-    --text-muted: #2a4a60;
-    --mono: 'Share Tech Mono', monospace;
-    --sans: 'Barlow Condensed', sans-serif;
-    --glow: 0 0 12px rgba(0,229,255,0.4);
-    --glow2: 0 0 12px rgba(0,255,136,0.4);
-    --glow3: 0 0 12px rgba(255,63,91,0.4);
-  }
-
-  * { margin:0; padding:0; box-sizing:border-box; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* GRID BACKGROUND */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  /* SCANLINE */
-  body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0,0,0,0.08) 2px,
-      rgba(0,0,0,0.08) 4px
-    );
-    pointer-events: none;
-    z-index: 999;
-  }
-
-  .wrapper { position: relative; z-index: 1; }
-
-  /* HEADER */
-  header {
-    border-bottom: 1px solid var(--border);
-    padding: 0 32px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 64px;
-    background: rgba(8,12,16,0.9);
-    backdrop-filter: blur(10px);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
-
-  .logo {
-    font-family: var(--mono);
-    font-size: 22px;
-    color: var(--accent);
-    letter-spacing: 2px;
-    text-shadow: var(--glow);
-  }
-  .logo span { color: var(--text-dim); }
-
-  .status-bar {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--text-dim);
-  }
-
-  .status-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--text-muted);
-    box-shadow: none;
-    transition: all 0.3s;
-    display: inline-block;
-    margin-right: 6px;
-  }
-  .status-dot.active {
-    background: var(--accent2);
-    box-shadow: var(--glow2);
-    animation: blink 1.5s infinite;
-  }
-
-  @keyframes blink {
-    0%,100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-
-  /* MAIN LAYOUT */
-  .main {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    min-height: calc(100vh - 64px);
-  }
-
-  /* SIDEBAR */
-  .sidebar {
-    border-right: 1px solid var(--border);
-    padding: 20px;
-    background: var(--bg2);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .sidebar-title {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-muted);
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  /* EMPTY STATE */
-  .no-controller {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px;
-    text-align: center;
-  }
-
-  .plug-icon {
-    font-size: 64px;
-    margin-bottom: 24px;
-    opacity: 0.2;
-    animation: float 3s ease-in-out infinite;
-  }
-
-  @keyframes float {
-    0%,100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-
-  .no-ctrl-text {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--text-muted);
-    line-height: 2;
-  }
-
-  .blink-cursor::after {
-    content: '_';
-    animation: blink 1s infinite;
-  }
-
-  /* CONTROLLER CARD IN SIDEBAR */
-  .ctrl-item {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 12px 14px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .ctrl-item:hover {
-    border-color: var(--border2);
-    background: #131f2a;
-  }
-  .ctrl-item.selected {
-    border-color: var(--accent);
-    background: rgba(0,229,255,0.05);
-    box-shadow: inset 0 0 20px rgba(0,229,255,0.05);
-  }
-
-  .ctrl-icon {
-    font-size: 24px;
-    min-width: 30px;
-    text-align: center;
-  }
-
-  .ctrl-info { flex: 1; min-width: 0; }
-
-  .ctrl-name {
-    font-family: var(--sans);
-    font-weight: 700;
-    font-size: 14px;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .ctrl-id {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-muted);
-    margin-top: 2px;
-  }
-
-  .ctrl-badge {
-    font-family: var(--mono);
-    font-size: 9px;
-    padding: 2px 6px;
-    border-radius: 2px;
-    background: rgba(0,255,136,0.1);
-    color: var(--accent2);
-    border: 1px solid rgba(0,255,136,0.2);
-  }
-
-  /* CONTENT */
-  .content {
-    padding: 24px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  /* SECTION */
-  .section {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-
-  .section-header {
-    padding: 12px 18px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: rgba(0,0,0,0.2);
-  }
-
-  .section-title {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--accent);
-    letter-spacing: 3px;
-    text-transform: uppercase;
-  }
-
-  .section-meta {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-muted);
-  }
-
-  .section-body { padding: 18px; }
-
-  /* CONTROLLER VISUAL */
-  .ctrl-visual-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 30px;
-    background: radial-gradient(ellipse at center, rgba(0,229,255,0.03) 0%, transparent 70%);
-  }
-
-  /* SVG CONTROLLERS */
-  .ctrl-svg { max-width: 500px; width: 100%; }
-
-  /* BUTTON STATES */
-  .btn-pressed { fill: var(--accent) !important; filter: drop-shadow(0 0 8px var(--accent)); }
-  .btn-axis { fill: var(--accent4) !important; filter: drop-shadow(0 0 6px var(--accent4)); }
-  .btn-default { fill: #1e3040; transition: all 0.1s; }
-
-  /* AXES SECTION */
-  .axes-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-  }
-
-  .axis-item { }
-
-  .axis-label {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-dim);
-    margin-bottom: 6px;
-    display: flex;
-    justify-content: space-between;
-  }
-
-  .axis-val {
-    color: var(--accent);
-    font-size: 12px;
-  }
-
-  .axis-bar {
-    height: 6px;
-    background: var(--border);
-    border-radius: 3px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .axis-fill {
-    position: absolute;
-    top: 0;
-    height: 100%;
-    background: var(--accent);
-    border-radius: 3px;
-    transition: width 0.05s, left 0.05s;
-    box-shadow: 0 0 8px rgba(0,229,255,0.5);
-  }
-
-  .axis-center {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    width: 1px;
-    height: 100%;
-    background: var(--border2);
-  }
-
-  /* JOYSTICK VISUALIZER */
-  .joysticks-row {
-    display: flex;
-    gap: 30px;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
-  .joystick-box {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .joystick-label {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-  }
-
-  .joystick-canvas {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    background: var(--bg3);
-    border: 2px solid var(--border2);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .joystick-canvas::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background:
-      linear-gradient(rgba(0,229,255,0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,229,255,0.05) 1px, transparent 1px);
-    background-size: 24px 24px;
-  }
-
-  .joystick-cross-h, .joystick-cross-v {
-    position: absolute;
-    background: rgba(0,229,255,0.1);
-  }
-  .joystick-cross-h { height: 1px; width: 100%; top: 50%; left: 0; }
-  .joystick-cross-v { width: 1px; height: 100%; left: 50%; top: 0; }
-
-  .joystick-dot {
-    position: absolute;
-    width: 18px; height: 18px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 15px var(--accent), 0 0 30px rgba(0,229,255,0.3);
-    transform: translate(-50%, -50%);
-    left: 50%; top: 50%;
-    transition: left 0.03s, top 0.03s;
-  }
-
-  .js-coords {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-muted);
-    text-align: center;
-  }
-
-  /* BUTTONS GRID */
-  .buttons-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 10px;
-  }
-
-  .btn-tile {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 10px 8px;
-    text-align: center;
-    transition: all 0.08s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-  }
-
-  .btn-tile.active {
-    background: rgba(0,229,255,0.1);
-    border-color: var(--accent);
-    box-shadow: 0 0 15px rgba(0,229,255,0.2), inset 0 0 15px rgba(0,229,255,0.05);
-  }
-
-  .btn-tile.active .btn-num { color: var(--accent); }
-
-  .btn-num {
-    font-family: var(--mono);
-    font-size: 9px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-  }
-
-  .btn-name {
-    font-family: var(--sans);
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-dim);
-    letter-spacing: 0.5px;
-  }
-
-  .btn-tile.active .btn-name { color: var(--text); }
-
-  .btn-pressure {
-    width: 100%;
-    height: 3px;
-    background: var(--border);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .btn-pressure-fill {
-    height: 100%;
-    background: var(--accent);
-    border-radius: 2px;
-    width: 0%;
-    transition: width 0.05s;
-  }
-
-  /* INFO ROW */
-  .info-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 12px;
-  }
-
-  .info-item {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 12px;
-  }
-
-  .info-key {
-    font-family: var(--mono);
-    font-size: 9px;
-    color: var(--text-muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  }
-
-  .info-value {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--accent);
-    word-break: break-all;
-  }
-
-  /* EVENTS LOG */
-  .log-container {
-    height: 160px;
-    overflow-y: auto;
-    background: var(--bg);
-    border-radius: 4px;
-    padding: 10px;
-    font-family: var(--mono);
-    font-size: 11px;
-    border: 1px solid var(--border);
-  }
-
-  .log-entry {
-    display: flex;
-    gap: 12px;
-    padding: 3px 0;
-    border-bottom: 1px solid rgba(30,48,64,0.3);
-    animation: fadeIn 0.2s ease;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateX(-5px); }
-    to { opacity: 1; transform: none; }
-  }
-
-  .log-time { color: var(--text-muted); min-width: 80px; }
-  .log-type { min-width: 70px; }
-  .log-type.press { color: var(--accent2); }
-  .log-type.release { color: var(--accent3); }
-  .log-type.axis { color: var(--accent4); }
-  .log-type.connect { color: var(--accent); }
-  .log-msg { color: var(--text-dim); }
-
-  /* WELCOME / NO SELECTION */
-  .welcome {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: 16px;
-    padding: 60px;
-  }
-
-  .welcome h1 {
-    font-family: var(--sans);
-    font-size: 64px;
-    font-weight: 900;
-    letter-spacing: 4px;
-    line-height: 1;
-    text-transform: uppercase;
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .welcome p {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--text-muted);
-    max-width: 440px;
-    line-height: 2;
-  }
-
-  .instructions {
-    margin-top: 20px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    max-width: 480px;
-  }
-
-  .instr-item {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 14px;
-    text-align: left;
-  }
-
-  .instr-icon { font-size: 22px; margin-bottom: 8px; }
-
-  .instr-title {
-    font-family: var(--sans);
-    font-weight: 700;
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--text);
-    margin-bottom: 4px;
-  }
-
-  .instr-desc {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-muted);
-    line-height: 1.6;
-  }
-
-  /* TRIGGER BARS */
-  .triggers-row {
-    display: flex;
-    gap: 24px;
-    justify-content: center;
-    margin-top: 10px;
-  }
-
-  .trigger-box { text-align: center; }
-
-  .trigger-label {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: 8px;
-  }
-
-  .trigger-bar {
-    width: 50px;
-    height: 140px;
-    background: var(--bg3);
-    border: 1px solid var(--border2);
-    border-radius: 4px;
-    position: relative;
-    overflow: hidden;
-    margin: 0 auto;
-  }
-
-  .trigger-fill {
-    position: absolute;
-    bottom: 0;
-    width: 100%;
-    background: linear-gradient(to top, var(--accent3), var(--accent4));
-    box-shadow: 0 0 20px rgba(255,63,91,0.4);
-    transition: height 0.05s;
-    border-radius: 2px;
-  }
-
-  .trigger-val {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-dim);
-    margin-top: 6px;
-  }
-
-  /* RUMBLE */
-  .rumble-controls {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .rumble-btn {
-    background: var(--bg3);
-    border: 1px solid var(--border2);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 11px;
-    padding: 8px 16px;
-    border-radius: 3px;
-    cursor: pointer;
-    transition: all 0.2s;
-    letter-spacing: 1px;
-  }
-
-  .rumble-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: var(--glow);
-  }
-
-  .rumble-slider-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-muted);
-  }
-
-  input[type="range"] {
-    -webkit-appearance: none;
-    appearance: none;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--border2);
-    outline: none;
-    width: 100px;
-  }
-
-  input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--accent);
-    cursor: pointer;
-    box-shadow: var(--glow);
-  }
-
-  /* SCROLLBAR */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-
-  /* RESPONSIVE */
-  @media (max-width: 768px) {
-    .main { grid-template-columns: 1fr; }
-    .sidebar { display: none; }
-  }
-
-  .corner-decoration {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    font-family: var(--mono);
-    font-size: 9px;
-    color: var(--text-muted);
-    letter-spacing: 2px;
-    opacity: 0.4;
-    z-index: 2;
-  }
-
-  .fps-counter {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-muted);
-  }
-
-  .mapping-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--mono);
-    font-size: 11px;
-  }
-  .mapping-table th {
-    text-align: left;
-    padding: 6px 10px;
-    color: var(--text-muted);
-    border-bottom: 1px solid var(--border);
-    font-size: 9px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-  }
-  .mapping-table td {
-    padding: 5px 10px;
-    border-bottom: 1px solid rgba(30,48,64,0.3);
-    color: var(--text-dim);
-  }
-  .mapping-table tr:hover td { background: rgba(0,229,255,0.02); }
-  .mapping-table .mapped { color: var(--accent); }
+:root {
+  --bg:      #0b0b0b;
+  --bg1:     #0e0e0e;
+  --bg2:     #131313;
+  --bg3:     #181818;
+  --bg4:     #1f1f1f;
+  --bg5:     #262626;
+  --ln:      #1e1e1e;
+  --ln2:     #2a2a2a;
+  --ln3:     #363636;
+  --t1:      #e0e0e0;
+  --t2:      #888;
+  --t3:      #555;
+  --t4:      #333;
+  --am:      #e8a020;
+  --am-d:    #6a4a10;
+  --am-bg:   rgba(232,160,32,.07);
+  --rd:      #c94444;
+  --rd-d:    #5a1818;
+  --rd-bg:   rgba(201,68,68,.07);
+  --tl:      #28a898;
+  --tl-bg:   rgba(40,168,152,.07);
+  --bl:      #4a82d8;
+  --bl-bg:   rgba(74,130,216,.07);
+  --mono:    'JetBrains Mono', monospace;
+  --sans:    'Syne', sans-serif;
+  --hdr:     42px;
+  --nav:     50px;
+  --sb:      24px;
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; }
+body { background:var(--bg); color:var(--t1); font-family:var(--sans); font-size:13px; height:100vh; display:flex; flex-direction:column; }
+
+/* ── HEADER ── */
+header {
+  height:var(--hdr); flex-shrink:0;
+  background:var(--bg1); border-bottom:1px solid var(--ln);
+  display:flex; align-items:stretch;
+}
+.hdr-brand {
+  padding:0 18px; border-right:1px solid var(--ln);
+  display:flex; align-items:center; gap:10px; flex-shrink:0;
+}
+.logo {
+  font-weight:800; font-size:14px; letter-spacing:-.04em;
+  color:var(--t1); display:flex; align-items:center; gap:5px;
+}
+.logo-mark {
+  width:7px; height:7px; border-radius:50%;
+  background:var(--am); flex-shrink:0;
+}
+.logo-sub { font-family:var(--mono); font-size:9px; color:var(--t4); font-weight:300; letter-spacing:.02em; }
+.ctrl-tabs { flex:1; display:flex; align-items:stretch; overflow-x:auto; }
+.ctrl-tab {
+  padding:0 16px; border-right:1px solid var(--ln);
+  display:flex; align-items:center; gap:8px; cursor:pointer;
+  font-size:11px; font-weight:700; letter-spacing:-.01em; color:var(--t4);
+  position:relative; user-select:none; white-space:nowrap;
+  transition:color .12s;
+}
+.ctrl-tab:hover { color:var(--t2); background:var(--bg2); }
+.ctrl-tab.active { color:var(--t1); }
+.ctrl-tab.active::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:2px;
+  background:var(--am);
+}
+.ctrl-tab-name { font-size:11px; }
+.ctrl-badge {
+  font-family:var(--mono); font-size:8px; padding:2px 5px;
+  border-radius:2px; font-weight:400;
+}
+.ctrl-badge.live { background:var(--tl-bg); color:var(--tl); border:1px solid rgba(40,168,152,.3); }
+.ctrl-badge.off  { background:var(--rd-bg);  color:var(--rd);  border:1px solid rgba(201,68,68,.3); }
+
+.hdr-actions {
+  padding:0 14px; border-left:1px solid var(--ln);
+  display:flex; align-items:center; gap:6px; flex-shrink:0;
+}
+.hbtn {
+  font-family:var(--mono); font-size:9px; font-weight:500; letter-spacing:.04em;
+  padding:5px 11px; border-radius:2px; border:1px solid var(--ln3);
+  background:var(--bg3); color:var(--t3); cursor:pointer; transition:all .12s;
+}
+.hbtn:hover { background:var(--bg4); color:var(--t2); border-color:var(--ln3); }
+.hbtn.am { border-color:var(--am-d); color:var(--am); background:var(--am-bg); }
+.hbtn.am:hover { background:rgba(232,160,32,.14); }
+.hbtn.rd { border-color:var(--rd-d); color:var(--rd); background:var(--rd-bg); }
+
+/* ── WORKSPACE ── */
+.workspace { flex:1; display:flex; overflow:hidden; }
+
+/* ── SIDENAV ── */
+nav {
+  width:var(--nav); flex-shrink:0; border-right:1px solid var(--ln);
+  background:var(--bg1); display:flex; flex-direction:column;
+  align-items:center; padding:6px 0; gap:2px;
+}
+.ni {
+  width:38px; height:38px; border-radius:3px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:3px; cursor:pointer; color:var(--t4); transition:all .12s;
+}
+.ni:hover { color:var(--t3); background:var(--bg3); }
+.ni.on { color:var(--am); background:var(--am-bg); }
+.ni-ico { font-size:15px; line-height:1; }
+.ni-lbl { font-family:var(--mono); font-size:6.5px; letter-spacing:.08em; text-transform:uppercase; }
+.ni-sep { width:20px; height:1px; background:var(--ln); margin:3px 0; }
+
+/* ── MAIN ── */
+main { flex:1; overflow:hidden; display:flex; flex-direction:column; position:relative; }
+.tp { display:none; flex:1; flex-direction:column; overflow:hidden; }
+.tp.on { display:flex; }
+
+/* CAL BANNER */
+.cal-banner {
+  display:none; align-items:center; gap:12px; padding:8px 16px;
+  background:var(--am-bg); border-bottom:1px solid var(--am-d);
+  flex-shrink:0;
+}
+.cal-banner.on { display:flex; }
+.cal-txt { font-family:var(--mono); font-size:10px; color:var(--am); flex:1; }
+.cal-end {
+  font-family:var(--mono); font-size:9px; padding:4px 12px;
+  border:1px solid var(--am-d); background:var(--am-bg); color:var(--am);
+  border-radius:2px; cursor:pointer; letter-spacing:.04em;
+}
+
+/* ── EMPTY STATE ── */
+.empty {
+  flex:1; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:20px; text-align:center; padding:40px;
+}
+.empty-ico { font-size:40px; opacity:.12; }
+.empty-h { font-size:26px; font-weight:800; letter-spacing:-.05em; color:var(--t1); line-height:1; }
+.empty-p { font-family:var(--mono); font-size:10px; color:var(--t4); line-height:2; max-width:340px; }
+.empty-grid {
+  display:grid; grid-template-columns:1fr 1fr; gap:8px; max-width:400px; text-align:left;
+}
+.estep { background:var(--bg2); border:1px solid var(--ln); border-radius:2px; padding:12px 14px; }
+.estep-n { font-family:var(--mono); font-size:8px; color:var(--am); letter-spacing:.08em; margin-bottom:4px; }
+.estep-t { font-family:var(--mono); font-size:10px; color:var(--t4); line-height:1.7; }
+
+/* ── SHARED LAYOUT ── */
+.pg { padding:14px; overflow-y:auto; }
+.row-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+.col { display:flex; flex-direction:column; gap:10px; }
+
+/* ── CARD ── */
+.card { background:var(--bg2); border:1px solid var(--ln); border-radius:2px; overflow:hidden; }
+.ch {
+  padding:8px 13px; border-bottom:1px solid var(--ln); background:var(--bg3);
+  display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
+}
+.ct { font-family:var(--mono); font-size:8px; font-weight:500; color:var(--t4); letter-spacing:.14em; text-transform:uppercase; }
+.cm { font-family:var(--mono); font-size:8px; color:var(--t4); }
+.cm.am { color:var(--am); }
+.cm.tl { color:var(--tl); }
+.cm.rd { color:var(--rd); }
+.cb { padding:13px; }
+
+/* ── INFO CELLS ── */
+.info-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:1px; background:var(--ln); }
+.ic { background:var(--bg2); padding:9px 11px; }
+.ik { font-family:var(--mono); font-size:7.5px; color:var(--t4); letter-spacing:.1em; text-transform:uppercase; margin-bottom:3px; }
+.iv { font-family:var(--mono); font-size:11px; color:var(--t1); font-weight:500; font-feature-settings:'tnum'; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.iv.am { color:var(--am); } .iv.tl { color:var(--tl); } .iv.rd { color:var(--rd); }
+
+/* ── SVG CONTROLLER ── */
+.ctrl-wrap { display:flex; align-items:center; justify-content:center; padding:24px 32px; background:var(--bg); }
+.ctrl-wrap svg { max-width:460px; width:100%; height:auto; }
+
+/* ── ACTIVE INPUTS ── */
+.ai-row { display:flex; flex-wrap:wrap; gap:5px; min-height:32px; align-items:center; padding:4px 0; }
+.ai-chip {
+  font-family:var(--sans); font-size:10px; font-weight:700;
+  padding:3px 8px; background:var(--am-bg); border:1px solid var(--am-d);
+  color:var(--am); border-radius:2px; letter-spacing:-.01em;
+  animation:chipIn .08s ease;
+}
+@keyframes chipIn { from{opacity:0;transform:scale(.85)} to{opacity:1;transform:none} }
+
+/* ── DRIFT WARNING ── */
+.drift { display:none; align-items:center; gap:8px; padding:6px 12px; background:var(--rd-bg); border:1px solid var(--rd-d); border-radius:2px; font-family:var(--mono); font-size:9px; color:var(--rd); }
+.drift.on { display:flex; }
+
+/* ── COMBO ── */
+.combo { display:flex; align-items:center; gap:4px; flex-wrap:wrap; min-height:28px; }
+.combo-key {
+  font-family:var(--sans); font-size:10px; font-weight:700;
+  padding:3px 7px; background:var(--bg4); border:1px solid var(--ln3);
+  border-bottom-width:2px; border-radius:2px; color:var(--t2);
+  letter-spacing:-.01em; animation:chipIn .08s ease;
+}
+
+/* ── AXIS ROWS ── */
+.axis-row {
+  display:flex; align-items:center; gap:10px;
+  padding:5px 0; border-bottom:1px solid var(--ln);
+}
+.axis-row:last-child { border-bottom:none; }
+.a-idx { font-family:var(--mono); font-size:8px; color:var(--t4); min-width:42px; letter-spacing:.06em; }
+.a-track { flex:1; height:3px; background:var(--bg5); position:relative; }
+.a-fill { position:absolute; height:100%; background:var(--am); top:0; }
+.a-dz { position:absolute; height:100%; top:0; background:rgba(232,160,32,.1); border:none; border-left:1px solid rgba(232,160,32,.25); border-right:1px solid rgba(232,160,32,.25); }
+.a-ctr { position:absolute; width:1px; height:100%; background:var(--ln3); left:50%; top:0; }
+.a-val { font-family:var(--mono); font-size:10px; font-weight:500; color:var(--t1); min-width:58px; text-align:right; font-feature-settings:'tnum'; }
+.a-min { font-family:var(--mono); font-size:8px; color:var(--t4); min-width:52px; font-feature-settings:'tnum'; }
+
+/* ── JOYSTICK 2D ── */
+.js-wrap { display:flex; flex-direction:column; align-items:center; gap:7px; }
+.js-lbl { font-family:var(--mono); font-size:8px; color:var(--t3); text-transform:uppercase; letter-spacing:.1em; }
+.js-canvas-wrap {
+  position:relative; border-radius:50%; overflow:hidden;
+  border:1px solid var(--ln2); background:var(--bg);
+}
+.js-data { font-family:var(--mono); font-size:9px; color:var(--t3); text-align:center; font-feature-settings:'tnum'; }
+
+/* ── GRAPH ── */
+.graph-wrap { position:relative; }
+.graph-label {
+  position:absolute; left:8px; top:6px;
+  font-family:var(--mono); font-size:8px; color:var(--t4); letter-spacing:.06em;
+}
+.graph-val {
+  position:absolute; right:8px; top:6px;
+  font-family:var(--mono); font-size:9px; color:var(--am); font-feature-settings:'tnum'; font-weight:500;
+}
+
+/* ── DEADZONE ── */
+.dz-row {
+  display:flex; align-items:center; gap:10px;
+  padding:5px 0; border-bottom:1px solid var(--ln);
+}
+.dz-row:last-child { border-bottom:none; }
+.dz-lbl { font-family:var(--mono); font-size:8px; color:var(--t3); min-width:52px; text-transform:uppercase; letter-spacing:.06em; }
+.dz-val { font-family:var(--mono); font-size:9px; color:var(--am); min-width:38px; text-align:right; font-feature-settings:'tnum'; }
+input[type=range] {
+  -webkit-appearance:none; appearance:none; flex:1; height:2px;
+  background:var(--bg5); outline:none; border-radius:0;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:11px; height:11px;
+  border-radius:50%; background:var(--am); cursor:pointer;
+}
+
+/* ── BUTTONS ── */
+.btn-grid { display:grid; gap:6px; }
+.btn-tile {
+  background:var(--bg3); border:1px solid var(--ln); border-radius:2px;
+  padding:8px 6px; display:flex; flex-direction:column; align-items:center; gap:4px;
+  transition:background .07s, border-color .07s; cursor:default; min-width:70px;
+}
+.btn-tile.on { background:var(--am-bg); border-color:var(--am-d); }
+.bt-i { font-family:var(--mono); font-size:7.5px; color:var(--t4); }
+.btn-tile.on .bt-i { color:var(--am-d); }
+.bt-n { font-family:var(--sans); font-size:11px; font-weight:700; color:var(--t3); letter-spacing:-.01em; text-align:center; line-height:1.1; }
+.btn-tile.on .bt-n { color:var(--am); }
+.bt-bar { width:100%; height:2px; background:var(--bg5); }
+.bt-fill { height:100%; background:var(--am); width:0%; }
+.bt-t { font-family:var(--mono); font-size:7.5px; color:var(--t4); font-feature-settings:'tnum'; }
+.btn-tile.on .bt-t { color:var(--am-d); }
+
+/* ── TRIGGERS ── */
+.trig-col { display:flex; flex-direction:column; align-items:center; gap:8px; }
+.trig-lbl { font-family:var(--mono); font-size:9px; color:var(--t3); text-transform:uppercase; letter-spacing:.1em; }
+.trig-track {
+  width:40px; height:180px; background:var(--bg); border:1px solid var(--ln2);
+  border-radius:2px; position:relative; overflow:hidden;
+}
+.trig-fill { position:absolute; bottom:0; width:100%; background:var(--am); }
+.trig-tick {
+  position:absolute; left:0; width:8px; height:1px; background:var(--ln3);
+}
+.trig-val { font-family:var(--mono); font-size:10px; color:var(--t2); font-feature-settings:'tnum'; }
+.trig-curve { display:flex; flex-direction:column; gap:6px; }
+.trig-curve-label { font-family:var(--mono); font-size:8px; color:var(--t4); letter-spacing:.08em; text-transform:uppercase; }
+
+/* ── RUMBLE ── */
+.rum-row {
+  display:flex; align-items:center; gap:12px; padding:7px 0; border-bottom:1px solid var(--ln);
+}
+.rum-row:last-child { border-bottom:none; }
+.rum-lbl { font-family:var(--mono); font-size:8px; color:var(--t3); min-width:90px; text-transform:uppercase; letter-spacing:.07em; }
+.rum-val { font-family:var(--mono); font-size:10px; color:var(--t2); min-width:48px; text-align:right; font-feature-settings:'tnum'; }
+.waveform { height:44px; background:var(--bg); border:1px solid var(--ln); border-radius:2px; display:flex; align-items:center; justify-content:center; gap:2px; padding:4px 8px; }
+.wv-bar { width:3px; background:var(--am); border-radius:1px; opacity:.6; }
+.rum-fire {
+  font-family:var(--mono); font-size:10px; font-weight:500;
+  padding:8px 20px; border:1px solid var(--am-d); background:var(--am-bg);
+  color:var(--am); border-radius:2px; cursor:pointer; letter-spacing:.06em;
+  transition:all .12s; display:flex; align-items:center; gap:8px;
+}
+.rum-fire:hover { background:rgba(232,160,32,.14); border-color:var(--am); }
+.rum-fire.no { border-color:var(--rd-d); color:var(--rd); background:var(--rd-bg); cursor:not-allowed; }
+
+/* ── LOG ── */
+.log-bar {
+  display:flex; align-items:stretch; border-bottom:1px solid var(--ln);
+  background:var(--bg1); flex-shrink:0;
+}
+.lf {
+  padding:7px 13px; font-family:var(--mono); font-size:8.5px; color:var(--t4);
+  cursor:pointer; border-right:1px solid var(--ln); letter-spacing:.08em;
+  text-transform:uppercase; transition:color .12s; user-select:none;
+}
+.lf:hover { color:var(--t2); }
+.lf.on { color:var(--am); }
+.log-body { flex:1; overflow-y:auto; }
+.log-e {
+  display:grid; grid-template-columns:88px 62px 1fr;
+  gap:12px; padding:4px 16px; border-bottom:1px solid var(--ln);
+  transition:background .08s;
+}
+.log-e:hover { background:var(--bg2); }
+.log-e:first-child { animation:logIn .1s ease; }
+@keyframes logIn { from{opacity:0;background:var(--am-bg)} to{opacity:1;background:transparent} }
+.log-ts { font-family:var(--mono); font-size:10px; color:var(--t4); font-feature-settings:'tnum'; }
+.log-k { font-family:var(--mono); font-size:10px; font-weight:500; }
+.log-k.kp { color:var(--tl); } .log-k.kr { color:var(--rd); }
+.log-k.ka { color:var(--am); } .log-k.ks { color:var(--bl); }
+.log-m { font-family:var(--mono); font-size:10px; color:var(--t3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ── STATUS BAR ── */
+footer {
+  height:var(--sb); flex-shrink:0;
+  background:var(--bg1); border-top:1px solid var(--ln);
+  display:flex; align-items:center;
+}
+.sb { padding:0 13px; border-right:1px solid var(--ln); height:100%; display:flex; align-items:center; gap:5px; white-space:nowrap; }
+.sb-l { font-family:var(--mono); font-size:9px; color:var(--t4); }
+.sb-v { font-family:var(--mono); font-size:9px; color:var(--t2); font-feature-settings:'tnum'; }
+.sb-v.g { color:var(--tl); } .sb-v.w { color:var(--am); } .sb-v.b { color:var(--rd); }
+.sb-sp { flex:1; }
+.rec-dot { width:6px; height:6px; border-radius:50%; background:var(--t4); flex-shrink:0; }
+.rec-dot.on { background:var(--rd); animation:recBlink 1s infinite; }
+@keyframes recBlink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+/* scrollbar */
+::-webkit-scrollbar { width:3px; height:3px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--ln3); border-radius:2px; }
 </style>
 </head>
 <body>
-<div class="wrapper">
 
-  <header>
-    <div class="logo">CTRL<span>//</span>DBG</div>
-    <div class="status-bar">
-      <span><span class="status-dot" id="globalDot"></span><span id="globalStatus">EN ATTENTE</span></span>
-      <span class="fps-counter">POLL: <span id="fpsDisplay">—</span> fps</span>
-      <span id="connCount" style="color:var(--text-muted)">0 manette(s)</span>
-    </div>
-  </header>
-
-  <div class="main">
-
-    <!-- SIDEBAR -->
-    <div class="sidebar">
-      <div class="sidebar-title">// Manettes connectées</div>
-      <div id="ctrlList">
-        <div class="no-controller" id="noCtrlMsg">
-          <div class="plug-icon">🎮</div>
-          <div class="no-ctrl-text">
-            Aucune manette détectée<br>
-            <span class="blink-cursor"></span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- CONTENT -->
-    <div class="content" id="mainContent">
-      <div class="welcome" id="welcomeScreen">
-        <h1>CTRL//DBG</h1>
-        <p>Débogueur de manettes temps-réel.<br>
-        Compatible Xbox · PlayStation · Joy-Con · Générique</p>
-        <div class="instructions">
-          <div class="instr-item">
-            <div class="instr-icon">🔌</div>
-            <div class="instr-title">Connexion</div>
-            <div class="instr-desc">Branchez votre manette via USB ou Bluetooth, puis appuyez sur un bouton.</div>
-          </div>
-          <div class="instr-item">
-            <div class="instr-icon">🎯</div>
-            <div class="instr-title">Axes</div>
-            <div class="instr-desc">Bougez les joysticks pour visualiser les valeurs en temps-réel.</div>
-          </div>
-          <div class="instr-item">
-            <div class="instr-icon">⚡</div>
-            <div class="instr-title">Boutons</div>
-            <div class="instr-desc">Chaque bouton pressé s'allume instantanément avec sa valeur de pression.</div>
-          </div>
-          <div class="instr-item">
-            <div class="instr-icon">📋</div>
-            <div class="instr-title">Logs</div>
-            <div class="instr-desc">Un journal complet des événements est enregistré en temps-réel.</div>
-          </div>
-        </div>
-      </div>
-
-      <div id="ctrlDetail" style="display:none; display: flex; flex-direction: column; gap: 20px;">
-
-        <!-- INFO -->
-        <div class="section">
-          <div class="section-header">
-            <span class="section-title">// Informations</span>
-            <span class="section-meta" id="ctrlType">—</span>
-          </div>
-          <div class="section-body">
-            <div class="info-row" id="infoRow"></div>
-          </div>
-        </div>
-
-        <!-- VISUAL -->
-        <div class="section">
-          <div class="section-header">
-            <span class="section-title">// Vue Manette</span>
-            <span class="section-meta" id="ctrlMapLabel">—</span>
-          </div>
-          <div class="ctrl-visual-container" id="ctrlVisual"></div>
-        </div>
-
-        <!-- JOYSTICKS -->
-        <div class="section">
-          <div class="section-header">
-            <span class="section-title">// Joysticks & Axes</span>
-            <span class="section-meta" id="axesCount">—</span>
-          </div>
-          <div class="section-body">
-            <div class="joysticks-row" id="joysticksRow"></div>
-            <div style="margin-top:20px">
-              <div class="axes-grid" id="axesGrid"></div>
-            </div>
-            <div class="triggers-row" id="triggersRow"></div>
-          </div>
-        </div>
-
-        <!-- BUTTONS -->
-        <div class="section">
-          <div class="section-header">
-            <span class="section-title">// Boutons</span>
-            <span class="section-meta" id="btnsCount">—</span>
-          </div>
-          <div class="section-body">
-            <div class="buttons-grid" id="buttonsGrid"></div>
-          </div>
-        </div>
-
-        <!-- RUMBLE -->
-        <div class="section" id="rumbleSection">
-          <div class="section-header">
-            <span class="section-title">// Vibration (Rumble)</span>
-            <span class="section-meta" id="rumbleStatus">—</span>
-          </div>
-          <div class="section-body">
-            <div class="rumble-controls">
-              <div class="rumble-slider-group">
-                Forte <input type="range" id="strongMag" min="0" max="1" step="0.01" value="0.5"> <span id="strongVal">0.50</span>
-              </div>
-              <div class="rumble-slider-group">
-                Faible <input type="range" id="weakMag" min="0" max="1" step="0.01" value="0.3"> <span id="weakVal">0.30</span>
-              </div>
-              <div class="rumble-slider-group">
-                Durée <input type="range" id="duration" min="50" max="2000" step="50" value="500"> <span id="durVal">500ms</span>
-              </div>
-              <button class="rumble-btn" id="rumbleBtn">▶ VIBRER</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- LOG -->
-        <div class="section">
-          <div class="section-header">
-            <span class="section-title">// Journal d'Événements</span>
-            <button class="rumble-btn" onclick="clearLog()" style="font-size:9px;padding:4px 10px">EFFACER</button>
-          </div>
-          <div class="section-body" style="padding:10px">
-            <div class="log-container" id="eventLog">
-              <div class="log-entry">
-                <span class="log-time">—</span>
-                <span class="log-type connect">SYS</span>
-                <span class="log-msg">Débogueur initialisé. En attente d'une manette…</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
+<header>
+  <div class="hdr-brand">
+    <div class="logo"><span class="logo-mark"></span>GamepadLab</div>
+    <div class="logo-sub">v2.0 / DEBUGGER</div>
   </div>
+  <div class="ctrl-tabs" id="ctrlTabs"></div>
+  <div class="hdr-actions">
+    <button class="hbtn" id="btnRec" title="Enregistrer les inputs">⏺ REC</button>
+    <button class="hbtn am" id="btnCal">⊕ CALIBRER</button>
+    <button class="hbtn" id="btnExport">↓ JSON</button>
+  </div>
+</header>
 
-  <div class="corner-decoration">GAMEPAD API v1.0 // CTRL//DBG</div>
+<div class="workspace">
+  <nav>
+    <div class="ni on" data-tab="overview" title="Aperçu"><div class="ni-ico">⊞</div><div class="ni-lbl">Aperçu</div></div>
+    <div class="ni" data-tab="sticks" title="Joysticks"><div class="ni-ico">⊕</div><div class="ni-lbl">Sticks</div></div>
+    <div class="ni" data-tab="buttons" title="Boutons"><div class="ni-ico">◈</div><div class="ni-lbl">Btns</div></div>
+    <div class="ni" data-tab="triggers" title="Gâchettes"><div class="ni-ico">⊿</div><div class="ni-lbl">Gâch.</div></div>
+    <div class="ni-sep"></div>
+    <div class="ni" data-tab="rumble" title="Vibration"><div class="ni-ico">⋮⋮</div><div class="ni-lbl">Rumble</div></div>
+    <div class="ni" data-tab="log" title="Journal"><div class="ni-ico">≡</div><div class="ni-lbl">Log</div></div>
+  </nav>
 
+  <main>
+    <!-- CAL BANNER -->
+    <div class="cal-banner" id="calBanner">
+      <span class="cal-txt">🔴 MODE CALIBRATION — Bougez tous les axes jusqu'aux extremes, puis appuyez sur tous les boutons.</span>
+      <button class="cal-end" id="calEnd">TERMINER</button>
+    </div>
+
+    <!-- ═══ OVERVIEW ═══ -->
+    <div class="tp on" id="tp-overview">
+      <div id="overviewEmpty" class="empty">
+        <div class="empty-ico">🎮</div>
+        <div class="empty-h">Aucune manette</div>
+        <div class="empty-p">Branchez votre manette et appuyez sur n'importe quel bouton pour démarrer le débogage.</div>
+        <div class="empty-grid">
+          <div class="estep"><div class="estep-n">ÉTAPE 01</div><div class="estep-t">Branchez via USB ou activez le Bluetooth</div></div>
+          <div class="estep"><div class="estep-n">ÉTAPE 02</div><div class="estep-t">Appuyez sur un bouton pour que le navigateur la détecte</div></div>
+          <div class="estep"><div class="estep-n">COMPATIBILITÉ</div><div class="estep-t">Xbox · PlayStation · Joy-Con · 8BitDo · Générique</div></div>
+          <div class="estep"><div class="estep-n">API</div><div class="estep-t">Gamepad API W3C — Chrome, Edge, Firefox, Opera</div></div>
+        </div>
+      </div>
+      <div id="overviewContent" style="display:none; flex:1; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:1fr 320px; height:100%; overflow:hidden;">
+          <div style="overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px;">
+            <!-- Info -->
+            <div class="card">
+              <div class="ch"><span class="ct">Informations</span><span class="cm" id="ov-type">—</span></div>
+              <div class="info-grid" id="ov-info"></div>
+            </div>
+            <!-- SVG Visual -->
+            <div class="card">
+              <div class="ch"><span class="ct">Vue Manette</span><span class="cm" id="ov-mapping">—</span></div>
+              <div class="ctrl-wrap" id="ctrlWrap"></div>
+            </div>
+            <!-- Active inputs -->
+            <div class="card">
+              <div class="ch"><span class="ct">Inputs Actifs</span><span class="cm tl" id="ov-active-count">0</span></div>
+              <div class="cb"><div class="ai-row" id="ov-chips"></div></div>
+            </div>
+            <!-- Last combo -->
+            <div class="card">
+              <div class="ch"><span class="ct">Séquence Récente</span><span class="cm" style="cursor:pointer; color:var(--t3)" onclick="combo=[]">VIDER</span></div>
+              <div class="cb"><div class="combo" id="ov-combo"></div></div>
+            </div>
+          </div>
+          <!-- RIGHT COLUMN: quick axis view -->
+          <div style="border-left:1px solid var(--ln); overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px;">
+            <div class="card">
+              <div class="ch"><span class="ct">Axes Rapide</span><span class="cm" id="ov-axcount">0</span></div>
+              <div class="cb" style="padding:8px 13px; display:flex; flex-direction:column;" id="ov-axes-quick"></div>
+            </div>
+            <div class="card">
+              <div class="ch"><span class="ct">Joystick G.</span></div>
+              <div class="cb" style="display:flex; justify-content:center;">
+                <canvas id="ov-js0" width="120" height="120" style="border-radius:50%; border:1px solid var(--ln2); background:var(--bg);"></canvas>
+              </div>
+              <div class="cb" style="padding:4px 13px 10px; text-align:center;">
+                <div style="font-family:var(--mono); font-size:9px; color:var(--t4); font-feature-settings:'tnum'" id="ov-js0-val">X: 0.000 · Y: 0.000</div>
+              </div>
+            </div>
+            <div class="card" id="ov-js1-card">
+              <div class="ch"><span class="ct">Joystick D.</span></div>
+              <div class="cb" style="display:flex; justify-content:center;">
+                <canvas id="ov-js1" width="120" height="120" style="border-radius:50%; border:1px solid var(--ln2); background:var(--bg);"></canvas>
+              </div>
+              <div class="cb" style="padding:4px 13px 10px; text-align:center;">
+                <div style="font-family:var(--mono); font-size:9px; color:var(--t4); font-feature-settings:'tnum'" id="ov-js1-val">X: 0.000 · Y: 0.000</div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="ch"><span class="ct">Drift</span></div>
+              <div class="cb" style="padding:8px 13px;">
+                <div class="drift" id="drift-warn">⚠ Drift détecté sur : <span id="drift-axes"></span></div>
+                <div style="font-family:var(--mono); font-size:9px; color:var(--t4); margin-top:4px;" id="drift-ok">✓ Aucun drift détecté</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ STICKS ═══ -->
+    <div class="tp" id="tp-sticks">
+      <div style="padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+        <!-- 2D views -->
+        <div class="card">
+          <div class="ch"><span class="ct">Visualiseurs 2D</span></div>
+          <div class="cb" style="display:flex; gap:24px; flex-wrap:wrap;" id="js-panels"></div>
+        </div>
+        <!-- Axis graphs -->
+        <div class="card">
+          <div class="ch"><span class="ct">Graphes Axes (200 échantillons)</span><span class="cm" id="st-axcount">0 axes</span></div>
+          <div class="cb" style="padding:8px 13px; display:flex; flex-direction:column; gap:8px;" id="ax-graphs"></div>
+        </div>
+        <!-- Deadzone config -->
+        <div class="card">
+          <div class="ch"><span class="ct">Zone Morte (Deadzone)</span></div>
+          <div class="cb" style="padding:8px 13px; display:flex; flex-direction:column;" id="dz-config"></div>
+        </div>
+        <!-- Calibration -->
+        <div class="card">
+          <div class="ch"><span class="ct">Calibration — Min / Max</span><span class="cm am" id="cal-status-txt">Non calibré</span></div>
+          <div class="cb" style="padding:8px 13px; display:flex; flex-direction:column;" id="cal-table"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ BUTTONS ═══ -->
+    <div class="tp" id="tp-buttons">
+      <div style="padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+        <div class="card">
+          <div class="ch"><span class="ct">Grille de Boutons</span><span class="cm" id="btn-count-lbl">0 boutons</span></div>
+          <div class="cb">
+            <div class="btn-grid" style="grid-template-columns:repeat(auto-fill,minmax(80px,1fr))" id="btn-grid"></div>
+          </div>
+        </div>
+        <!-- Mapping reference -->
+        <div class="card">
+          <div class="ch"><span class="ct">Correspondance Standard</span><span class="cm" id="map-type-lbl">—</span></div>
+          <div class="cb" style="padding:0">
+            <table style="width:100%; border-collapse:collapse; font-family:var(--mono); font-size:10px;" id="map-table">
+              <thead><tr>
+                <th style="padding:6px 12px; text-align:left; color:var(--t4); border-bottom:1px solid var(--ln); font-size:8px; letter-spacing:.1em; text-transform:uppercase">INDEX</th>
+                <th style="padding:6px 12px; text-align:left; color:var(--t4); border-bottom:1px solid var(--ln); font-size:8px; letter-spacing:.1em; text-transform:uppercase">XBOX</th>
+                <th style="padding:6px 12px; text-align:left; color:var(--t4); border-bottom:1px solid var(--ln); font-size:8px; letter-spacing:.1em; text-transform:uppercase">PLAYSTATION</th>
+                <th style="padding:6px 12px; text-align:left; color:var(--t4); border-bottom:1px solid var(--ln); font-size:8px; letter-spacing:.1em; text-transform:uppercase">NINTENDO</th>
+                <th style="padding:6px 12px; text-align:right; color:var(--t4); border-bottom:1px solid var(--ln); font-size:8px; letter-spacing:.1em; text-transform:uppercase">VALEUR</th>
+              </tr></thead>
+              <tbody id="map-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TRIGGERS ═══ -->
+    <div class="tp" id="tp-triggers">
+      <div style="padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+        <div class="card">
+          <div class="ch"><span class="ct">Gâchettes / Triggers</span></div>
+          <div class="cb" style="display:flex; gap:32px; justify-content:center; flex-wrap:wrap;" id="trig-panels"></div>
+        </div>
+        <div class="card">
+          <div class="ch"><span class="ct">Courbes de Réponse</span></div>
+          <div class="cb" style="display:flex; gap:16px; flex-wrap:wrap;" id="trig-curves"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ RUMBLE ═══ -->
+    <div class="tp" id="tp-rumble">
+      <div style="padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
+        <div class="card">
+          <div class="ch"><span class="ct">Paramètres Vibration</span><span class="cm" id="rum-support">—</span></div>
+          <div class="cb" style="padding:8px 13px; display:flex; flex-direction:column;">
+            <div class="rum-row">
+              <span class="rum-lbl">Intensité forte</span>
+              <input type="range" id="r-strong" min="0" max="1" step=".01" value=".6">
+              <span class="rum-val" id="r-strong-v">0.60</span>
+            </div>
+            <div class="rum-row">
+              <span class="rum-lbl">Intensité faible</span>
+              <input type="range" id="r-weak" min="0" max="1" step=".01" value=".3">
+              <span class="rum-val" id="r-weak-v">0.30</span>
+            </div>
+            <div class="rum-row">
+              <span class="rum-lbl">Délai démarrage</span>
+              <input type="range" id="r-delay" min="0" max="1000" step="50" value="0">
+              <span class="rum-val" id="r-delay-v">0 ms</span>
+            </div>
+            <div class="rum-row">
+              <span class="rum-lbl">Durée</span>
+              <input type="range" id="r-dur" min="50" max="3000" step="50" value="500">
+              <span class="rum-val" id="r-dur-v">500 ms</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ch"><span class="ct">Aperçu Forme d'Onde</span></div>
+          <div class="cb" style="display:flex; flex-direction:column; gap:12px;">
+            <div class="waveform" id="waveform"></div>
+            <button class="rum-fire" id="rum-btn">▶&nbsp;&nbsp;DÉCLENCHER LA VIBRATION</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ch"><span class="ct">Préréglages Rapides</span></div>
+          <div class="cb" style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="hbtn" onclick="firePreset(.2,.1,200)">Court léger</button>
+            <button class="hbtn" onclick="firePreset(.5,.3,500)">Court moyen</button>
+            <button class="hbtn" onclick="firePreset(1,.6,300)">Impact fort</button>
+            <button class="hbtn" onclick="firePreset(.8,.4,1000)">Long soutenu</button>
+            <button class="hbtn" onclick="firePreset(1,1,2000)">MAX</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ LOG ═══ -->
+    <div class="tp" id="tp-log" style="flex-direction:column">
+      <div class="log-bar">
+        <div class="lf on" data-f="all">TOUS</div>
+        <div class="lf" data-f="press">PRESSION</div>
+        <div class="lf" data-f="release">RELÂCHÉ</div>
+        <div class="lf" data-f="axis">AXES</div>
+        <div class="lf" data-f="sys">SYSTÈME</div>
+        <div style="flex:1"></div>
+        <div class="lf" onclick="clearLog()" style="cursor:pointer; color:var(--rd)">VIDER</div>
+      </div>
+      <div class="log-body" id="logBody">
+        <div class="log-e"><span class="log-ts">—</span><span class="log-k ks">SYS</span><span class="log-m">GamepadLab initialisé — En attente d'une manette…</span></div>
+      </div>
+    </div>
+
+  </main>
 </div>
 
+<footer>
+  <div class="sb"><span class="sb-l">POLL</span><span class="sb-v w" id="sb-fps">—</span><span class="sb-l">fps</span></div>
+  <div class="sb"><span class="sb-l">CONNECTÉ</span><span class="sb-v g" id="sb-conn">0</span></div>
+  <div class="sb"><span class="sb-l">MANETTE</span><span class="sb-v" id="sb-id">—</span></div>
+  <div class="sb"><span class="sb-l">MAPPING</span><span class="sb-v" id="sb-map">—</span></div>
+  <div class="sb"><span class="rec-dot" id="rec-dot"></span><span class="sb-l" id="rec-lbl">PRÊT</span></div>
+  <div class="sb-sp"></div>
+  <div class="sb"><span class="sb-l">Gamepad API W3C</span></div>
+</footer>
+
 <script>
-// ─────────────────────────────────────────────
-//  CONTROLLER IDENTIFICATION
-// ─────────────────────────────────────────────
-const CTRL_PROFILES = [
-  { match: /xbox/i,        icon: '🟢', label: 'Xbox',        type: 'Standard (Xbox)',     color: '#107c10' },
-  { match: /xinput/i,      icon: '🟢', label: 'XInput',      type: 'Standard (Xbox)',     color: '#107c10' },
-  { match: /playstation|dualsense|dualshock|ps[345]/i, icon: '🔵', label: 'PlayStation', type: 'DualSense/DualShock', color: '#003087' },
-  { match: /joy.?con|nintendo|pro controller/i, icon: '🔴', label: 'Nintendo', type: 'Nintendo Switch', color: '#e4000f' },
-  { match: /8bitdo/i,      icon: '🟡', label: '8BitDo',      type: '8BitDo',              color: '#d4a000' },
-  { match: /logitech/i,    icon: '🔷', label: 'Logitech',    type: 'Logitech',            color: '#0082c8' },
-  { match: /steam/i,       icon: '⚫', label: 'Steam',       type: 'Steam Controller',    color: '#1b2838' },
+// ═══════════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════════
+const MAX_HIST = 200;
+
+const PROFILES = [
+  { rx:/xbox|xinput/i,           ico:'🟢', lbl:'Xbox',       color:'#2d7a2d' },
+  { rx:/dualsense|dualshock|playstation|ps[34]/i, ico:'🔵', lbl:'PlayStation', color:'#1a3a8a' },
+  { rx:/joy.?con|nintendo|pro controller/i,        ico:'🔴', lbl:'Nintendo',    color:'#8a1010' },
+  { rx:/8bitdo/i,                ico:'🟡', lbl:'8BitDo',     color:'#8a6a00' },
+  { rx:/logitech/i,              ico:'🔷', lbl:'Logitech',   color:'#0050a0' },
+  { rx:/steam/i,                 ico:'⚫', lbl:'Steam',      color:'#1a2838' },
 ];
 
-function identifyController(id) {
-  for (const p of CTRL_PROFILES) {
-    if (p.match.test(id)) return p;
-  }
-  return { icon: '🎮', label: 'Générique', type: 'Contrôleur Générique', color: '#4a7a96' };
-}
-
-// Standard button mappings
-const BTN_NAMES = {
-  standard: ['A','B','X','Y','LB','RB','LT','RT','Select','Start','L3','R3','↑','↓','←','→','Home','Touch'],
-  xbox:     ['A','B','X','Y','LB','RB','LT','RT','View','Menu','L3','R3','↑','↓','←','→','Xbox','Share'],
-  ps:       ['Croix','Rond','Carré','Triangle','L1','R1','L2','R2','Share','Options','L3','R3','↑','↓','←','→','PS','Touch'],
-  nintendo: ['B','A','Y','X','L','R','ZL','ZR','−','+','L-Stick','R-Stick','↑','↓','←','→','Home','Cap'],
+const BNAMES = {
+  xbox:['A','B','X','Y','LB','RB','LT','RT','View','Menu','L3','R3','↑','↓','←','→','Xbox','Share'],
+  ps:  ['Croix','Rond','Carré','△','L1','R1','L2','R2','Share','Options','L3','R3','↑','↓','←','→','PS','Touch'],
+  nin: ['B','A','Y','X','L','R','ZL','ZR','−','+','LS','RS','↑','↓','←','→','Home','Cap'],
+  std: ['A','B','X','Y','LB','RB','LT','RT','Sel.','Start','L3','R3','↑','↓','←','→','Home','?'],
 };
 
-function getBtnNames(profile) {
-  if (!profile) return BTN_NAMES.standard;
-  if (/xbox/i.test(profile.type)) return BTN_NAMES.xbox;
-  if (/playstation|dual/i.test(profile.type)) return BTN_NAMES.ps;
-  if (/nintendo|switch|joy/i.test(profile.type)) return BTN_NAMES.nintendo;
-  return BTN_NAMES.standard;
-}
+const ANAMES = ['LS-X','LS-Y','RS-X','RS-Y','Ax.4','Ax.5','Ax.6','Ax.7'];
 
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 //  STATE
-// ─────────────────────────────────────────────
-let selectedIndex = null;
-let animId = null;
-let prevButtons = {};
-let prevAxes = {};
-let pollCount = 0;
-let lastFpsTick = Date.now();
-let currentFps = 0;
+// ═══════════════════════════════════════════════════════
+let selIdx = null;
+let rafId  = null;
 
-// ─────────────────────────────────────────────
+let axHist   = {};  // axis histories per controller
+let dzVals   = {};  // deadzone per axis
+let calData  = {};  // calibration min/max
+let calMode  = false;
+let isRec    = false;
+let recData  = [];
+let combo    = [];
+let comboTimer = null;
+let logFilter = 'all';
+
+let prevBtns  = {};
+let prevAxes  = {};
+let btnTimers = {};
+
+let pollCnt  = 0;
+let lastFps  = Date.now();
+let fps      = 0;
+
+// ═══════════════════════════════════════════════════════
+//  PROFILE DETECTION
+// ═══════════════════════════════════════════════════════
+function getProfile(id) {
+  for (const p of PROFILES) if (p.rx.test(id)) return p;
+  return { ico:'🎮', lbl:'Générique', color:'#444' };
+}
+
+function getBtnNames(id) {
+  if (/xbox|xinput/i.test(id)) return BNAMES.xbox;
+  if (/dualsense|dualshock|playstation|ps[34]/i.test(id)) return BNAMES.ps;
+  if (/joy.?con|nintendo|pro controller/i.test(id)) return BNAMES.nin;
+  return BNAMES.std;
+}
+
+// ═══════════════════════════════════════════════════════
 //  GAMEPAD EVENTS
-// ─────────────────────────────────────────────
-window.addEventListener('gamepadconnected', (e) => {
-  addLog('connect', `Manette connectée: ${e.gamepad.id}`, 'SYS');
-  updateSidebar();
-  if (selectedIndex === null) selectController(e.gamepad.index);
+// ═══════════════════════════════════════════════════════
+window.addEventListener('gamepadconnected', e => {
+  addLog('sys', `Connecté: ${e.gamepad.id}`, 'SYS', 'ks');
+  initController(e.gamepad.index);
+  refreshTabs();
+  if (selIdx === null) selectCtrl(e.gamepad.index);
 });
 
-window.addEventListener('gamepaddisconnected', (e) => {
-  addLog('connect', `Manette déconnectée: Index ${e.gamepad.index}`, 'SYS');
-  if (selectedIndex === e.gamepad.index) {
-    selectedIndex = null;
-    document.getElementById('ctrlDetail').style.display = 'none';
-    document.getElementById('welcomeScreen').style.display = 'flex';
+window.addEventListener('gamepaddisconnected', e => {
+  addLog('sys', `Déconnecté: Index ${e.gamepad.index}`, 'SYS', 'ks');
+  if (selIdx === e.gamepad.index) {
+    selIdx = null;
+    showEmpty();
   }
-  updateSidebar();
+  refreshTabs();
 });
 
-// ─────────────────────────────────────────────
-//  SIDEBAR
-// ─────────────────────────────────────────────
-function updateSidebar() {
-  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-  const list = document.getElementById('ctrlList');
-  const noMsg = document.getElementById('noCtrlMsg');
-  const dot = document.getElementById('globalDot');
-  const status = document.getElementById('globalStatus');
-  const countEl = document.getElementById('connCount');
-
-  const connected = [...gamepads].filter(Boolean);
-  countEl.textContent = `${connected.length} manette(s)`;
-
-  if (connected.length === 0) {
-    noMsg.style.display = 'flex';
-    dot.classList.remove('active');
-    status.textContent = 'EN ATTENTE';
-  } else {
-    noMsg.style.display = 'none';
-    dot.classList.add('active');
-    status.textContent = 'CONNECTÉ';
+function initController(idx) {
+  if (!axHist[idx]) axHist[idx] = {};
+  if (!dzVals[idx]) dzVals[idx] = {};
+  if (!calData[idx]) {
+    calData[idx] = { min: {}, max: {}, active: false };
   }
-
-  // Remove old items (not the no-ctrl msg)
-  [...list.querySelectorAll('.ctrl-item')].forEach(el => el.remove());
-
-  connected.forEach(gp => {
-    const prof = identifyController(gp.id);
-    const item = document.createElement('div');
-    item.className = 'ctrl-item' + (selectedIndex === gp.index ? ' selected' : '');
-    item.dataset.index = gp.index;
-    item.innerHTML = `
-      <div class="ctrl-icon">${prof.icon}</div>
-      <div class="ctrl-info">
-        <div class="ctrl-name">${prof.label}</div>
-        <div class="ctrl-id">#${gp.index} · ${gp.buttons.length}btn · ${gp.axes.length}axes</div>
-      </div>
-      <div class="ctrl-badge">LIVE</div>
-    `;
-    item.addEventListener('click', () => selectController(gp.index));
-    list.appendChild(item);
-  });
 }
 
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+//  TAB SYSTEM (side nav)
+// ═══════════════════════════════════════════════════════
+document.querySelectorAll('.ni[data-tab]').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.ni').forEach(n => n.classList.remove('on'));
+    document.querySelectorAll('.tp').forEach(p => p.classList.remove('on'));
+    el.classList.add('on');
+    document.getElementById('tp-' + el.dataset.tab).classList.add('on');
+    if (selIdx !== null) rebuildCurrentTab(el.dataset.tab);
+  });
+});
+
+function currentTab() {
+  const n = document.querySelector('.ni.on');
+  return n ? n.dataset.tab : 'overview';
+}
+
+// Controller tabs in header
+function refreshTabs() {
+  const gps = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(Boolean);
+  const tabs = document.getElementById('ctrlTabs');
+  tabs.innerHTML = '';
+  document.getElementById('sb-conn').textContent = gps.length;
+  gps.forEach(gp => {
+    const p = getProfile(gp.id);
+    const t = document.createElement('div');
+    t.className = 'ctrl-tab' + (selIdx === gp.index ? ' active' : '');
+    t.innerHTML = `<span class="ctrl-tab-name">${p.ico} ${p.lbl} #${gp.index}</span><span class="ctrl-badge live">LIVE</span>`;
+    t.addEventListener('click', () => selectCtrl(gp.index));
+    tabs.appendChild(t);
+  });
+  if (!gps.length) tabs.innerHTML = `<div style="display:flex;align-items:center;padding:0 16px;font-family:var(--mono);font-size:10px;color:var(--t4)">Aucune manette — Branchez et appuyez sur un bouton</div>`;
+}
+
+// ═══════════════════════════════════════════════════════
 //  SELECT CONTROLLER
-// ─────────────────────────────────────────────
-function selectController(index) {
-  selectedIndex = index;
-  prevButtons = {};
-  prevAxes = {};
-  updateSidebar();
+// ═══════════════════════════════════════════════════════
+function selectCtrl(idx) {
+  selIdx = idx;
+  prevBtns = {}; prevAxes = {}; btnTimers = {};
+  refreshTabs();
 
-  const gp = navigator.getGamepads()[index];
+  const gp = navigator.getGamepads()[idx];
   if (!gp) return;
 
-  const prof = identifyController(gp.id);
-
-  document.getElementById('welcomeScreen').style.display = 'none';
-  const detail = document.getElementById('ctrlDetail');
-  detail.style.display = 'flex';
-
-  // Info
-  document.getElementById('ctrlType').textContent = prof.type;
-  document.getElementById('infoRow').innerHTML = `
-    <div class="info-item"><div class="info-key">ID</div><div class="info-value" style="font-size:10px">${gp.id}</div></div>
-    <div class="info-item"><div class="info-key">Index</div><div class="info-value">${gp.index}</div></div>
-    <div class="info-item"><div class="info-key">Mapping</div><div class="info-value">${gp.mapping || 'none'}</div></div>
-    <div class="info-item"><div class="info-key">Boutons</div><div class="info-value">${gp.buttons.length}</div></div>
-    <div class="info-item"><div class="info-key">Axes</div><div class="info-value">${gp.axes.length}</div></div>
-    <div class="info-item"><div class="info-key">Vibration</div><div class="info-value">${gp.vibrationActuator ? '✓ OUI' : '✗ NON'}</div></div>
-  `;
-
-  document.getElementById('ctrlMapLabel').textContent = prof.type;
-
-  // Visual
-  renderControllerVisual(gp, prof);
-
-  // Joysticks
-  renderJoysticks(gp);
-
-  // Axes bars
-  renderAxesBars(gp);
-
-  // Triggers
-  renderTriggers(gp);
-
-  // Buttons
-  renderButtonsGrid(gp, prof);
-
-  // Rumble
-  const rumbleStatus = document.getElementById('rumbleStatus');
-  rumbleStatus.textContent = gp.vibrationActuator ? 'Supporté' : 'Non supporté';
-
-  // Rumble sliders
-  document.getElementById('strongMag').oninput = function() {
-    document.getElementById('strongVal').textContent = parseFloat(this.value).toFixed(2);
-  };
-  document.getElementById('weakMag').oninput = function() {
-    document.getElementById('weakVal').textContent = parseFloat(this.value).toFixed(2);
-  };
-  document.getElementById('duration').oninput = function() {
-    document.getElementById('durVal').textContent = this.value + 'ms';
-  };
-
-  document.getElementById('rumbleBtn').onclick = () => {
-    const gp2 = navigator.getGamepads()[selectedIndex];
-    if (gp2?.vibrationActuator) {
-      gp2.vibrationActuator.playEffect('dual-rumble', {
-        startDelay: 0,
-        duration: parseInt(document.getElementById('duration').value),
-        weakMagnitude: parseFloat(document.getElementById('weakMag').value),
-        strongMagnitude: parseFloat(document.getElementById('strongMag').value),
-      });
-      addLog('axis', 'Vibration déclenchée', 'RUMBLE');
-    } else {
-      addLog('release', 'Vibration non supportée', 'RUMBLE');
-    }
-  };
-}
-
-// ─────────────────────────────────────────────
-//  CONTROLLER VISUAL SVG
-// ─────────────────────────────────────────────
-function renderControllerVisual(gp, prof) {
-  const container = document.getElementById('ctrlVisual');
-  const isPS = /playstation|dual/i.test(prof.type);
-  const isNintendo = /nintendo|switch|joy/i.test(prof.type);
-
-  if (isPS) {
-    container.innerHTML = buildDualSenseSVG();
-  } else if (isNintendo) {
-    container.innerHTML = buildSwitchSVG();
-  } else {
-    container.innerHTML = buildXboxSVG();
-  }
-}
-
-function buildXboxSVG() {
-  return `<svg class="ctrl-svg" viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg">
-    <!-- Body -->
-    <path d="M130,100 C60,100 30,160 30,220 C30,270 70,295 110,295 C140,295 160,280 175,260 L325,260 C340,280 360,295 390,295 C430,295 470,270 470,220 C470,160 440,100 370,100 C340,100 310,110 285,130 C270,140 250,145 250,145 C250,145 230,140 215,130 C190,110 160,100 130,100Z" fill="#1a2a38" stroke="#243b50" stroke-width="2"/>
-    <!-- Grips -->
-    <ellipse cx="140" cy="260" rx="55" ry="40" fill="#162230" stroke="#1e3040" stroke-width="1.5"/>
-    <ellipse cx="360" cy="260" rx="55" ry="40" fill="#162230" stroke="#1e3040" stroke-width="1.5"/>
-    <!-- Center guide button -->
-    <circle cx="250" cy="150" r="22" fill="#0f1923" stroke="#243b50" stroke-width="2"/>
-    <circle cx="250" cy="150" r="15" fill="#1a2a38" id="vs-home"/>
-    <text x="250" y="155" text-anchor="middle" fill="#4a7a96" font-size="12" font-family="monospace">X</text>
-    <!-- Left stick area -->
-    <circle cx="165" cy="185" r="30" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
-    <circle cx="165" cy="185" r="18" fill="#243b50" id="vs-ls" class="btn-default"/>
-    <!-- Right stick area -->
-    <circle cx="295" cy="220" r="30" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
-    <circle cx="295" cy="220" r="18" fill="#243b50" id="vs-rs" class="btn-default"/>
-    <!-- DPAD -->
-    <g transform="translate(215,210)">
-      <rect x="-8" y="-22" width="16" height="44" rx="3" fill="#0f1923" id="vs-dpad"/>
-      <rect x="-22" y="-8" width="44" height="16" rx="3" fill="#0f1923"/>
-      <circle cx="0" cy="0" r="5" fill="#162230"/>
-    </g>
-    <!-- Face buttons -->
-    <circle cx="350" cy="165" r="12" fill="#1e3040" id="vs-b" class="btn-default"/><text x="350" y="170" text-anchor="middle" fill="#4a7a96" font-size="11" font-family="monospace">B</text>
-    <circle cx="330" cy="185" r="12" fill="#1e3040" id="vs-x" class="btn-default"/><text x="330" y="190" text-anchor="middle" fill="#4a7a96" font-size="11" font-family="monospace">X</text>
-    <circle cx="370" cy="185" r="12" fill="#1e3040" id="vs-a" class="btn-default"/><text x="370" y="190" text-anchor="middle" fill="#4a7a96" font-size="11" font-family="monospace">A</text>
-    <circle cx="350" cy="205" r="12" fill="#1e3040" id="vs-y" class="btn-default"/><text x="350" y="210" text-anchor="middle" fill="#4a7a96" font-size="11" font-family="monospace">Y</text>
-    <!-- Bumpers -->
-    <path d="M90,100 C90,85 130,75 165,75 L175,90 C150,90 110,95 100,105Z" fill="#1e3040" id="vs-lb" class="btn-default"/>
-    <path d="M410,100 C410,85 370,75 335,75 L325,90 C350,90 390,95 400,105Z" fill="#1e3040" id="vs-rb" class="btn-default"/>
-    <!-- Triggers -->
-    <path d="M75,85 C75,70 110,55 160,58 L165,75 C125,73 95,83 90,100Z" fill="#162230" id="vs-lt" class="btn-default"/>
-    <path d="M425,85 C425,70 390,55 340,58 L335,75 C375,73 405,83 410,100Z" fill="#162230" id="vs-rt" class="btn-default"/>
-    <!-- View/Menu buttons -->
-    <rect x="220" y="175" width="18" height="11" rx="5" fill="#1e3040" id="vs-view" class="btn-default"/>
-    <rect x="262" y="175" width="18" height="11" rx="5" fill="#1e3040" id="vs-menu" class="btn-default"/>
-    <!-- Labels -->
-    <text x="229" y="183" text-anchor="middle" fill="#2a4a60" font-size="7" font-family="monospace">VW</text>
-    <text x="271" y="183" text-anchor="middle" fill="#2a4a60" font-size="7" font-family="monospace">MN</text>
-    <text x="98" y="92" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">LB</text>
-    <text x="402" y="92" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">RB</text>
-    <text x="83" y="78" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">LT</text>
-    <text x="418" y="78" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">RT</text>
-  </svg>`;
-}
-
-function buildDualSenseSVG() {
-  return `<svg class="ctrl-svg" viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg">
-    <!-- Body -->
-    <path d="M140,90 C70,90 25,155 25,225 C25,275 65,300 105,300 C135,300 158,283 175,260 L325,260 C342,283 365,300 395,300 C435,300 475,275 475,225 C475,155 430,90 360,90 C325,90 295,105 275,125 C265,134 250,140 250,140 C250,140 235,134 225,125 C205,105 175,90 140,90Z" fill="#1a2a38" stroke="#243b50" stroke-width="2"/>
-    <!-- PS Grips -->
-    <ellipse cx="145" cy="268" rx="58" ry="38" fill="#13202e" stroke="#1e3040" stroke-width="1.5"/>
-    <ellipse cx="355" cy="268" rx="58" ry="38" fill="#13202e" stroke="#1e3040" stroke-width="1.5"/>
-    <!-- Touchpad -->
-    <rect x="195" y="145" width="110" height="70" rx="8" fill="#0f1923" stroke="#1e3040" stroke-width="2" id="vs-touch"/>
-    <!-- Left stick -->
-    <circle cx="165" cy="215" r="30" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
-    <circle cx="165" cy="215" r="18" fill="#243b50" id="vs-ls" class="btn-default"/>
-    <!-- Right stick -->
-    <circle cx="300" cy="215" r="30" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
-    <circle cx="300" cy="215" r="18" fill="#243b50" id="vs-rs" class="btn-default"/>
-    <!-- DPAD -->
-    <g transform="translate(215,205)">
-      <rect x="-8" y="-22" width="16" height="44" rx="3" fill="#0f1923"/>
-      <rect x="-22" y="-8" width="44" height="16" rx="3" fill="#0f1923"/>
-      <circle cx="0" cy="0" r="5" fill="#162230"/>
-    </g>
-    <!-- Face buttons -->
-    <circle cx="355" cy="155" r="13" fill="#1e3040" id="vs-tri" class="btn-default"/><text x="355" y="160" text-anchor="middle" fill="#4a7a96" font-size="12">△</text>
-    <circle cx="335" cy="175" r="13" fill="#1e3040" id="vs-sq" class="btn-default"/><text x="335" y="180" text-anchor="middle" fill="#4a7a96" font-size="12">□</text>
-    <circle cx="375" cy="175" r="13" fill="#1e3040" id="vs-ci" class="btn-default"/><text x="375" y="180" text-anchor="middle" fill="#4a7a96" font-size="12">○</text>
-    <circle cx="355" cy="195" r="13" fill="#1e3040" id="vs-cr" class="btn-default"/><text x="355" y="200" text-anchor="middle" fill="#4a7a96" font-size="12">✕</text>
-    <!-- L/R bumpers -->
-    <path d="M85,90 C85,75 130,62 165,62 L170,80 C140,80 105,88 100,100Z" fill="#1e3040" id="vs-l1" class="btn-default"/>
-    <path d="M415,90 C415,75 370,62 335,62 L330,80 C360,80 395,88 400,100Z" fill="#1e3040" id="vs-r1" class="btn-default"/>
-    <!-- Triggers -->
-    <path d="M70,78 C70,60 110,45 162,48 L167,64 C122,61 90,72 86,90Z" fill="#162230" id="vs-l2" class="btn-default"/>
-    <path d="M430,78 C430,60 390,45 338,48 L333,64 C378,61 410,72 414,90Z" fill="#162230" id="vs-r2" class="btn-default"/>
-    <!-- Share / Options -->
-    <circle cx="225" cy="168" r="9" fill="#1e3040" id="vs-share" class="btn-default"/>
-    <circle cx="275" cy="168" r="9" fill="#1e3040" id="vs-options" class="btn-default"/>
-    <text x="225" y="172" text-anchor="middle" fill="#2a4a60" font-size="7" font-family="monospace">SH</text>
-    <text x="275" y="172" text-anchor="middle" fill="#2a4a60" font-size="7" font-family="monospace">OP</text>
-    <!-- PS button -->
-    <circle cx="250" cy="138" r="10" fill="#0f1923" stroke="#1e3040" stroke-width="1.5" id="vs-ps"/>
-    <text x="250" y="142" text-anchor="middle" fill="#4a7a96" font-size="9" font-family="monospace">PS</text>
-    <!-- Labels -->
-    <text x="98" y="88" fill="#2a4a60" font-size="8" font-family="monospace">L1</text>
-    <text x="392" y="88" fill="#2a4a60" font-size="8" font-family="monospace">R1</text>
-    <text x="79" y="72" fill="#2a4a60" font-size="8" font-family="monospace">L2</text>
-    <text x="413" y="72" fill="#2a4a60" font-size="8" font-family="monospace">R2</text>
-  </svg>`;
-}
-
-function buildSwitchSVG() {
-  return `<svg class="ctrl-svg" viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg">
-    <!-- Left JoyCon -->
-    <rect x="20" y="60" width="100" height="220" rx="30" fill="#1e2e42" stroke="#243b50" stroke-width="2"/>
-    <!-- Right JoyCon -->
-    <rect x="380" y="60" width="100" height="220" rx="30" fill="#2a1e2a" stroke="#3a2040" stroke-width="2"/>
-    <!-- Center body -->
-    <rect x="120" y="80" width="260" height="190" rx="8" fill="#1a2a38" stroke="#243b50" stroke-width="2"/>
-    <!-- Screen area -->
-    <rect x="130" y="90" width="240" height="170" rx="6" fill="#090d12" stroke="#1e3040" stroke-width="1.5"/>
-    <!-- Left stick -->
-    <circle cx="80" cy="130" r="28" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
-    <circle cx="80" cy="130" r="17" fill="#243b50" id="vs-ls" class="btn-default"/>
-    <!-- Right stick -->
-    <circle cx="420" cy="180" r="28" fill="#0f1923" stroke="#243040" stroke-width="2"/>
-    <circle cx="420" cy="180" r="17" fill="#33243a" id="vs-rs" class="btn-default"/>
-    <!-- DPAD (Left JoyCon) -->
-    <g transform="translate(75,215)">
-      <rect x="-8" y="-20" width="16" height="40" rx="3" fill="#0f1923"/>
-      <rect x="-20" y="-8" width="40" height="16" rx="3" fill="#0f1923"/>
-      <circle cx="0" cy="0" r="4" fill="#162230"/>
-    </g>
-    <!-- Face buttons (Right) -->
-    <circle cx="430" cy="120" r="12" fill="#1e2838" id="vs-x" class="btn-default"/><text x="430" y="125" text-anchor="middle" fill="#4a7a96" font-size="11">X</text>
-    <circle cx="410" cy="140" r="12" fill="#1e2838" id="vs-y" class="btn-default"/><text x="410" y="145" text-anchor="middle" fill="#4a7a96" font-size="11">Y</text>
-    <circle cx="450" cy="140" r="12" fill="#1e2838" id="vs-a" class="btn-default"/><text x="450" y="145" text-anchor="middle" fill="#4a7a96" font-size="11">A</text>
-    <circle cx="430" cy="160" r="12" fill="#1e2838" id="vs-b" class="btn-default"/><text x="430" y="165" text-anchor="middle" fill="#4a7a96" font-size="11">B</text>
-    <!-- SL/SR Left -->
-    <rect x="15" y="110" width="12" height="30" rx="6" fill="#1e3040" id="vs-sl-l"/>
-    <rect x="15" y="155" width="12" height="30" rx="6" fill="#1e3040" id="vs-sr-l"/>
-    <!-- SL/SR Right -->
-    <rect x="473" y="110" width="12" height="30" rx="6" fill="#2a1a30" id="vs-sl-r"/>
-    <rect x="473" y="155" width="12" height="30" rx="6" fill="#2a1a30" id="vs-sr-r"/>
-    <!-- − + buttons -->
-    <circle cx="50" cy="95" r="9" fill="#0f1923" id="vs-minus" class="btn-default"/>
-    <text x="50" y="99" text-anchor="middle" fill="#2a4a60" font-size="11">−</text>
-    <circle cx="450" cy="95" r="9" fill="#0f1923" id="vs-plus" class="btn-default"/>
-    <text x="450" y="99" text-anchor="middle" fill="#2a4a60" font-size="11">+</text>
-    <!-- Home / Screenshot -->
-    <circle cx="420" cy="235" r="11" fill="#0f1923" id="vs-home"/>
-    <text x="420" y="239" text-anchor="middle" fill="#4a7a96" font-size="9">⌂</text>
-    <circle cx="80" cy="195" r="9" fill="#0f1923" id="vs-cap"/>
-    <text x="80" y="199" text-anchor="middle" fill="#4a7a96" font-size="8">📷</text>
-    <!-- L/ZL (top left) -->
-    <rect x="25" y="52" width="80" height="18" rx="5" fill="#1e3040" id="vs-l"/>
-    <rect x="25" y="33" width="80" height="18" rx="5" fill="#162230" id="vs-zl"/>
-    <text x="65" y="64" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">L</text>
-    <text x="65" y="45" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">ZL</text>
-    <!-- R/ZR (top right) -->
-    <rect x="395" y="52" width="80" height="18" rx="5" fill="#2a1e30" id="vs-r"/>
-    <rect x="395" y="33" width="80" height="18" rx="5" fill="#201828" id="vs-zr"/>
-    <text x="435" y="64" text-anchor="middle" fill="#3a2a40" font-size="9" font-family="monospace">R</text>
-    <text x="435" y="45" text-anchor="middle" fill="#3a2a40" font-size="9" font-family="monospace">ZR</text>
-  </svg>`;
-}
-
-// ─────────────────────────────────────────────
-//  RENDER JOYSTICKS
-// ─────────────────────────────────────────────
-function renderJoysticks(gp) {
-  const row = document.getElementById('joysticksRow');
-  row.innerHTML = '';
-  const numJoysticks = Math.floor(gp.axes.length / 2);
-  const jsLabels = ['Joystick G.', 'Joystick D.', 'Joystick 3', 'Joystick 4'];
-  for (let i = 0; i < numJoysticks; i++) {
-    const box = document.createElement('div');
-    box.className = 'joystick-box';
-    box.innerHTML = `
-      <div class="joystick-label">${jsLabels[i] || 'JS ' + i}</div>
-      <div class="joystick-canvas" id="js-canvas-${i}">
-        <div class="joystick-cross-h"></div>
-        <div class="joystick-cross-v"></div>
-        <div class="joystick-dot" id="js-dot-${i}"></div>
-      </div>
-      <div class="js-coords" id="js-coords-${i}">X: 0.000 · Y: 0.000</div>
-    `;
-    row.appendChild(box);
-  }
-}
-
-// ─────────────────────────────────────────────
-//  RENDER AXES BARS
-// ─────────────────────────────────────────────
-function renderAxesBars(gp) {
-  const grid = document.getElementById('axesGrid');
-  grid.innerHTML = '';
-  document.getElementById('axesCount').textContent = `${gp.axes.length} axes`;
-
+  // init history
   gp.axes.forEach((_, i) => {
-    const item = document.createElement('div');
-    item.className = 'axis-item';
-    item.innerHTML = `
-      <div class="axis-label">
-        <span>AXIS ${i}</span>
-        <span class="axis-val" id="axis-val-${i}">0.000</span>
-      </div>
-      <div class="axis-bar">
-        <div class="axis-center"></div>
-        <div class="axis-fill" id="axis-fill-${i}" style="width:0%;left:50%"></div>
-      </div>
-    `;
-    grid.appendChild(item);
+    if (!axHist[idx][i]) axHist[idx][i] = new Float32Array(MAX_HIST);
+    if (dzVals[idx][i] === undefined) dzVals[idx][i] = 0.05;
   });
+
+  const p = getProfile(gp.id);
+  document.getElementById('sb-id').textContent  = p.lbl;
+  document.getElementById('sb-map').textContent = gp.mapping || 'none';
+
+  buildOverview(gp, p);
+  buildSticks(gp);
+  buildButtons(gp);
+  buildTriggers(gp);
+  buildRumble(gp);
+  showContent();
 }
 
-// ─────────────────────────────────────────────
-//  RENDER TRIGGERS
-// ─────────────────────────────────────────────
-function renderTriggers(gp) {
-  const row = document.getElementById('triggersRow');
-  row.innerHTML = '';
-  // Only show if buttons 6 and 7 exist (LT/RT)
-  if (gp.buttons.length >= 8) {
-    const labels = ['LT / L2 / ZL', 'RT / R2 / ZR'];
-    [6, 7].forEach((bi, i) => {
-      const box = document.createElement('div');
-      box.className = 'trigger-box';
-      box.innerHTML = `
-        <div class="trigger-label">${labels[i]}</div>
-        <div class="trigger-bar">
-          <div class="trigger-fill" id="trigger-fill-${bi}" style="height:0%"></div>
-        </div>
-        <div class="trigger-val" id="trigger-val-${bi}">0.00</div>
-      `;
-      row.appendChild(box);
-    });
-  }
-}
-
-// ─────────────────────────────────────────────
-//  RENDER BUTTONS GRID
-// ─────────────────────────────────────────────
-function renderButtonsGrid(gp, prof) {
-  const grid = document.getElementById('buttonsGrid');
-  grid.innerHTML = '';
-  document.getElementById('btnsCount').textContent = `${gp.buttons.length} boutons`;
-  const names = getBtnNames(prof);
-
-  gp.buttons.forEach((_, i) => {
-    const tile = document.createElement('div');
-    tile.className = 'btn-tile';
-    tile.id = `btn-tile-${i}`;
-    tile.innerHTML = `
-      <div class="btn-num">BTN ${i}</div>
-      <div class="btn-name">${names[i] || '?'}</div>
-      <div class="btn-pressure"><div class="btn-pressure-fill" id="btn-press-${i}"></div></div>
-    `;
-    grid.appendChild(tile);
-  });
-}
-
-// ─────────────────────────────────────────────
-//  POLL LOOP
-// ─────────────────────────────────────────────
-function pollLoop() {
-  animId = requestAnimationFrame(pollLoop);
-  pollCount++;
-
-  // FPS
-  const now = Date.now();
-  if (now - lastFpsTick >= 1000) {
-    currentFps = pollCount;
-    pollCount = 0;
-    lastFpsTick = now;
-    document.getElementById('fpsDisplay').textContent = currentFps;
-  }
-
-  if (selectedIndex === null) return;
-  const gp = navigator.getGamepads()[selectedIndex];
+function rebuildCurrentTab(tab) {
+  const gp = navigator.getGamepads()[selIdx];
   if (!gp) return;
+  const p = getProfile(gp.id);
+  if (tab === 'overview') buildOverview(gp, p);
+  else if (tab === 'sticks')   buildSticks(gp);
+  else if (tab === 'buttons')  buildButtons(gp);
+  else if (tab === 'triggers') buildTriggers(gp);
+  else if (tab === 'rumble')   buildRumble(gp);
+}
 
-  const prof = identifyController(gp.id);
-  const names = getBtnNames(prof);
+function showEmpty() {
+  document.getElementById('overviewEmpty').style.display = 'flex';
+  document.getElementById('overviewContent').style.display = 'none';
+}
+function showContent() {
+  document.getElementById('overviewEmpty').style.display = 'none';
+  document.getElementById('overviewContent').style.display = '';
+}
 
-  // --- UPDATE BUTTONS ---
-  gp.buttons.forEach((btn, i) => {
-    const tile = document.getElementById(`btn-tile-${i}`);
-    const pressEl = document.getElementById(`btn-press-${i}`);
-    if (!tile) return;
+// ═══════════════════════════════════════════════════════
+//  BUILD: OVERVIEW
+// ═══════════════════════════════════════════════════════
+function buildOverview(gp, p) {
+  document.getElementById('ov-type').textContent = p.lbl;
+  document.getElementById('ov-mapping').textContent = gp.mapping || 'none';
+  document.getElementById('ov-axcount').textContent = gp.axes.length + ' axes';
 
-    const wasPressed = prevButtons[i] || false;
-    if (btn.pressed !== wasPressed) {
-      if (btn.pressed) {
-        tile.classList.add('active');
-        addLog('press', `${names[i] || 'Bouton ' + i} (idx:${i})`, 'BTN↓');
-      } else {
-        tile.classList.remove('active');
-        addLog('release', `${names[i] || 'Bouton ' + i} (idx:${i})`, 'BTN↑');
-      }
-      prevButtons[i] = btn.pressed;
-    }
-    if (pressEl) pressEl.style.width = (btn.value * 100) + '%';
+  document.getElementById('ov-info').innerHTML = [
+    ['ID', gp.id.slice(0,40) + (gp.id.length > 40 ? '…' : '')],
+    ['Index', gp.index],
+    ['Boutons', gp.buttons.length],
+    ['Axes', gp.axes.length],
+    ['Mapping', gp.mapping || 'none', gp.mapping ? 'tl' : ''],
+    ['Vibration', gp.vibrationActuator ? '✓ Oui' : '✗ Non', gp.vibrationActuator ? 'tl' : 'rd'],
+    ['Timestamp', gp.timestamp.toFixed(1) + ' ms'],
+  ].map(([k,v,cls='']) => `<div class="ic"><div class="ik">${k}</div><div class="iv ${cls}" title="${v}">${v}</div></div>`).join('');
 
-    // Triggers
-    const trigFill = document.getElementById(`trigger-fill-${i}`);
-    const trigVal = document.getElementById(`trigger-val-${i}`);
-    if (trigFill) {
-      trigFill.style.height = (btn.value * 100) + '%';
-      trigVal.textContent = btn.value.toFixed(2);
-    }
+  // SVG
+  document.getElementById('ctrlWrap').innerHTML = buildSVG(gp.id);
+
+  // Axes quick
+  const qa = document.getElementById('ov-axes-quick');
+  qa.innerHTML = '';
+  gp.axes.forEach((v, i) => {
+    const row = document.createElement('div');
+    row.className = 'axis-row';
+    row.innerHTML = `
+      <span class="a-idx">AX ${i}</span>
+      <div class="a-track">
+        <div class="a-ctr"></div>
+        <div class="a-dz" id="ov-dz-${i}"></div>
+        <div class="a-fill" id="ov-af-${i}"></div>
+      </div>
+      <span class="a-val" id="ov-av-${i}">0.000</span>`;
+    qa.appendChild(row);
   });
+}
 
-  // --- UPDATE AXES ---
-  gp.axes.forEach((val, i) => {
-    const valEl = document.getElementById(`axis-val-${i}`);
-    const fillEl = document.getElementById(`axis-fill-${i}`);
-    if (valEl) valEl.textContent = val.toFixed(3);
-    if (fillEl) {
-      if (val >= 0) {
-        fillEl.style.left = '50%';
-        fillEl.style.width = (val * 50) + '%';
-      } else {
-        fillEl.style.left = (50 + val * 50) + '%';
-        fillEl.style.width = (-val * 50) + '%';
-      }
-    }
+// ═══════════════════════════════════════════════════════
+//  BUILD: STICKS
+// ═══════════════════════════════════════════════════════
+function buildSticks(gp) {
+  const idx = gp.index;
+  document.getElementById('st-axcount').textContent = gp.axes.length + ' axes';
 
-    // Log big axis changes
-    const prev = prevAxes[i] !== undefined ? prevAxes[i] : 0;
-    if (Math.abs(val - prev) > 0.1) {
-      prevAxes[i] = val;
-    }
-  });
-
-  // --- UPDATE JOYSTICKS ---
+  // 2D panels
+  const jpanel = document.getElementById('js-panels');
+  jpanel.innerHTML = '';
   const numJS = Math.floor(gp.axes.length / 2);
   for (let i = 0; i < numJS; i++) {
-    const ax = gp.axes[i * 2] || 0;
-    const ay = gp.axes[i * 2 + 1] || 0;
-    const dot = document.getElementById(`js-dot-${i}`);
-    const coords = document.getElementById(`js-coords-${i}`);
-    if (dot) {
-      dot.style.left = (50 + ax * 42) + '%';
-      dot.style.top = (50 + ay * 42) + '%';
-    }
-    if (coords) {
-      coords.textContent = `X: ${ax.toFixed(3)} · Y: ${ay.toFixed(3)}`;
-    }
+    const labels = ['Joystick G.','Joystick D.','Ax. 4-5','Ax. 6-7'];
+    jpanel.innerHTML += `
+      <div class="js-wrap">
+        <div class="js-lbl">${labels[i] || 'JS '+i}</div>
+        <canvas id="js2d-${i}" width="130" height="130" style="border-radius:50%;border:1px solid var(--ln2);background:var(--bg)"></canvas>
+        <div class="js-data" id="js2d-val-${i}">X: 0.000 · Y: 0.000</div>
+      </div>`;
+  }
+
+  // Axis graphs
+  const ag = document.getElementById('ax-graphs');
+  ag.innerHTML = '';
+  gp.axes.forEach((_, i) => {
+    const wrap = document.createElement('div');
+    wrap.style.position = 'relative';
+    const c = document.createElement('canvas');
+    c.id = `axg-${i}`;
+    c.width = 800; c.height = 48;
+    c.style.cssText = 'width:100%;height:48px;display:block;background:var(--bg);border:1px solid var(--ln)';
+    wrap.innerHTML = `<div class="graph-label">${ANAMES[i] || 'AXIS '+i}</div><div class="graph-val" id="axg-val-${i}">0.000</div>`;
+    wrap.appendChild(c);
+    ag.appendChild(wrap);
+  });
+
+  // Deadzone
+  const dz = document.getElementById('dz-config');
+  dz.innerHTML = '';
+  gp.axes.forEach((_, i) => {
+    const curDz = dzVals[idx][i] !== undefined ? dzVals[idx][i] : 0.05;
+    const row = document.createElement('div');
+    row.className = 'dz-row';
+    row.innerHTML = `
+      <span class="dz-lbl">AX ${i} DZ</span>
+      <input type="range" min="0" max=".3" step=".005" value="${curDz}" oninput="setDz(${idx},${i},this.value)">
+      <span class="dz-val" id="dz-val-${i}">${curDz.toFixed(3)}</span>`;
+    dz.appendChild(row);
+  });
+
+  // Cal table
+  buildCalTable(gp);
+}
+
+function buildCalTable(gp) {
+  const idx = gp.index;
+  const ct = document.getElementById('cal-table');
+  ct.innerHTML = '';
+  gp.axes.forEach((_, i) => {
+    const cd = calData[idx] || { min:{}, max:{} };
+    const mn = cd.min[i] !== undefined ? cd.min[i].toFixed(3) : '—';
+    const mx = cd.max[i] !== undefined ? cd.max[i].toFixed(3) : '—';
+    const row = document.createElement('div');
+    row.className = 'axis-row';
+    row.innerHTML = `
+      <span class="a-idx">AX ${i}</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--rd);min-width:60px">MIN ${mn}</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--tl);min-width:60px">MAX ${mx}</span>
+      <span style="font-family:var(--mono);font-size:9px;color:var(--t4)" id="cal-range-${i}">
+        ${cd.min[i] !== undefined ? 'Range: ' + (cd.max[i] - cd.min[i]).toFixed(3) : 'Non calibré'}
+      </span>`;
+    ct.appendChild(row);
+  });
+}
+
+function setDz(idx, i, val) {
+  dzVals[idx][i] = parseFloat(val);
+  const el = document.getElementById(`dz-val-${i}`);
+  if (el) el.textContent = parseFloat(val).toFixed(3);
+}
+
+// ═══════════════════════════════════════════════════════
+//  BUILD: BUTTONS
+// ═══════════════════════════════════════════════════════
+function buildButtons(gp) {
+  document.getElementById('btn-count-lbl').textContent = gp.buttons.length + ' boutons';
+  document.getElementById('map-type-lbl').textContent = getProfile(gp.id).lbl;
+  const names = getBtnNames(gp.id);
+
+  const grid = document.getElementById('btn-grid');
+  grid.innerHTML = '';
+  gp.buttons.forEach((_, i) => {
+    const t = document.createElement('div');
+    t.className = 'btn-tile';
+    t.id = 'btile-'+i;
+    t.innerHTML = `<div class="bt-i">BTN ${i}</div><div class="bt-n">${names[i]||'?'}</div><div class="bt-bar"><div class="bt-fill" id="bfill-${i}"></div></div><div class="bt-t" id="btime-${i}">—</div>`;
+    grid.appendChild(t);
+  });
+
+  // Mapping table
+  const tb = document.getElementById('map-tbody');
+  tb.innerHTML = gp.buttons.map((_, i) => `
+    <tr>
+      <td style="padding:4px 12px; border-bottom:1px solid var(--ln); color:var(--t3); font-family:var(--mono); font-size:9px">${i}</td>
+      <td style="padding:4px 12px; border-bottom:1px solid var(--ln); color:var(--t2); font-family:var(--mono); font-size:10px">${BNAMES.xbox[i]||'—'}</td>
+      <td style="padding:4px 12px; border-bottom:1px solid var(--ln); color:var(--t2); font-family:var(--mono); font-size:10px">${BNAMES.ps[i]||'—'}</td>
+      <td style="padding:4px 12px; border-bottom:1px solid var(--ln); color:var(--t2); font-family:var(--mono); font-size:10px">${BNAMES.nin[i]||'—'}</td>
+      <td style="padding:4px 12px; border-bottom:1px solid var(--ln); color:var(--am); font-family:var(--mono); font-size:10px; text-align:right; font-feature-settings:'tnum'" id="mval-${i}">0.000</td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  BUILD: TRIGGERS
+// ═══════════════════════════════════════════════════════
+function buildTriggers(gp) {
+  const panel = document.getElementById('trig-panels');
+  panel.innerHTML = '';
+  const curves = document.getElementById('trig-curves');
+  curves.innerHTML = '';
+
+  const trigBtns = gp.buttons.length >= 8 ? [
+    {i:6, lbl:'LT / L2 / ZL'},{i:7, lbl:'RT / R2 / ZR'}
+  ] : [];
+
+  // also show if any button has value > 0 or is analog
+  trigBtns.forEach(({i, lbl}) => {
+    panel.innerHTML += `
+      <div class="trig-col">
+        <div class="trig-lbl">${lbl}</div>
+        <div class="trig-track" id="ttrack-${i}">
+          <div class="trig-tick" style="top:25%"></div>
+          <div class="trig-tick" style="top:50%"></div>
+          <div class="trig-tick" style="top:75%"></div>
+          <div class="trig-fill" id="tfill-${i}" style="height:0%"></div>
+        </div>
+        <div class="trig-val" id="tval-${i}">0.000</div>
+      </div>`;
+
+    // Curve canvas
+    const wrap = document.createElement('div');
+    wrap.className = 'trig-curve';
+    wrap.innerHTML = `<div class="trig-curve-label">${lbl} — Courbe</div>`;
+    const c = document.createElement('canvas');
+    c.id = `tcurve-${i}`;
+    c.width = 200; c.height = 120;
+    c.style.cssText = 'border:1px solid var(--ln);background:var(--bg);display:block';
+    wrap.appendChild(c);
+    curves.appendChild(wrap);
+    drawTriggerCurve(c, 0);
+  });
+
+  if (!trigBtns.length) {
+    panel.innerHTML = `<div style="font-family:var(--mono);font-size:10px;color:var(--t4);padding:8px">Moins de 8 boutons détectés — gâchettes analogiques non disponibles</div>`;
   }
 }
 
-// ─────────────────────────────────────────────
+function drawTriggerCurve(canvas, val) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = '#1e1e1e';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += W/4) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += H/4) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // Diagonal reference
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.beginPath(); ctx.moveTo(0,H); ctx.lineTo(W,0); ctx.stroke();
+
+  // Current value marker
+  const px = val * W;
+  ctx.strokeStyle = '#e8a020';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(px,0); ctx.lineTo(px,H); ctx.stroke();
+
+  // Fill
+  ctx.fillStyle = 'rgba(232,160,32,.15)';
+  ctx.fillRect(0, H - val*H, px, val*H);
+}
+
+// ═══════════════════════════════════════════════════════
+//  BUILD: RUMBLE
+// ═══════════════════════════════════════════════════════
+function buildRumble(gp) {
+  const el = document.getElementById('rum-support');
+  el.textContent = gp.vibrationActuator ? '✓ Supporté' : '✗ Non supporté';
+  el.className = 'cm ' + (gp.vibrationActuator ? 'tl' : 'rd');
+
+  const btn = document.getElementById('rum-btn');
+  btn.className = 'rum-fire' + (gp.vibrationActuator ? '' : ' no');
+  btn.onclick = gp.vibrationActuator ? triggerRumble : null;
+
+  updateWaveform();
+
+  ['r-strong','r-weak','r-delay','r-dur'].forEach(id => {
+    document.getElementById(id).oninput = function() {
+      const v = this.value;
+      const disp = { 'r-strong': v+' ', 'r-weak': v+' ', 'r-delay': v+' ms', 'r-dur': v+' ms' };
+      document.getElementById(id+'-v').textContent = (id.includes('delay') || id.includes('dur')) ? parseInt(v)+' ms' : parseFloat(v).toFixed(2);
+      updateWaveform();
+    };
+  });
+}
+
+function updateWaveform() {
+  const w = document.getElementById('waveform');
+  if (!w) return;
+  w.innerHTML = '';
+  const strong = parseFloat(document.getElementById('r-strong').value);
+  const dur    = parseInt(document.getElementById('r-dur').value);
+  const delay  = parseInt(document.getElementById('r-delay').value);
+  const total  = dur + delay;
+  const numBars = 36;
+  for (let i = 0; i < numBars; i++) {
+    const t = i / numBars;
+    const tNorm = (t * total - delay) / dur;
+    let h;
+    if (tNorm < 0 || tNorm > 1) { h = 2; }
+    else { h = (4 + strong * 34 * Math.abs(Math.sin(tNorm * Math.PI))); }
+    const bar = document.createElement('div');
+    bar.className = 'wv-bar';
+    bar.style.height = h + 'px';
+    bar.style.opacity = tNorm >= 0 && tNorm <= 1 ? '.8' : '.2';
+    w.appendChild(bar);
+  }
+}
+
+function triggerRumble() {
+  const gp = navigator.getGamepads()[selIdx];
+  if (!gp?.vibrationActuator) return;
+  gp.vibrationActuator.playEffect('dual-rumble', {
+    startDelay: parseInt(document.getElementById('r-delay').value),
+    duration:   parseInt(document.getElementById('r-dur').value),
+    weakMagnitude:   parseFloat(document.getElementById('r-weak').value),
+    strongMagnitude: parseFloat(document.getElementById('r-strong').value),
+  });
+  addLog('sys', `Vibration: fort=${document.getElementById('r-strong').value} faible=${document.getElementById('r-weak').value} durée=${document.getElementById('r-dur').value}ms`, 'RUMBLE', 'ks');
+}
+
+function firePreset(strong, weak, dur) {
+  document.getElementById('r-strong').value = strong;
+  document.getElementById('r-weak').value = weak;
+  document.getElementById('r-dur').value = dur;
+  document.getElementById('r-strong-v').textContent = strong.toFixed(2);
+  document.getElementById('r-weak-v').textContent   = weak.toFixed(2);
+  document.getElementById('r-dur-v').textContent    = dur + ' ms';
+  updateWaveform();
+  triggerRumble();
+}
+
+// ═══════════════════════════════════════════════════════
+//  SVG CONTROLLERS
+// ═══════════════════════════════════════════════════════
+function buildSVG(id) {
+  if (/dualsense|dualshock|playstation|ps[34]/i.test(id)) return svgPS();
+  if (/joy.?con|nintendo|pro controller/i.test(id)) return svgSwitch();
+  return svgXbox();
+}
+
+function svgXbox() {
+  return `<svg viewBox="0 0 520 320" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="bgrad" cx="50%" cy="30%">
+        <stop offset="0%" stop-color="#1f2f3e"/>
+        <stop offset="100%" stop-color="#0d1820"/>
+      </radialGradient>
+    </defs>
+    <!-- Body -->
+    <path d="M145,95 C75,95 28,158 28,225 C28,272 68,298 108,298 C138,298 162,280 178,258 L342,258 C358,280 382,298 412,298 C452,298 492,272 492,225 C492,158 445,95 375,95 C342,95 312,108 288,128 C272,140 260,146 260,146 C260,146 248,140 232,128 C208,108 178,95 145,95Z" fill="url(#bgrad)" stroke="#253545" stroke-width="1.5"/>
+    <ellipse cx="148" cy="265" rx="60" ry="42" fill="#0c161f" stroke="#1a2535" stroke-width="1"/>
+    <ellipse cx="372" cy="265" rx="60" ry="42" fill="#0c161f" stroke="#1a2535" stroke-width="1"/>
+    <!-- Center guide -->
+    <circle cx="260" cy="148" r="24" fill="#0d1820" stroke="#253545" stroke-width="1.5"/>
+    <circle cx="260" cy="148" r="16" fill="#141e28"/>
+    <text x="260" y="153" text-anchor="middle" fill="#2a4a60" font-size="11" font-family="monospace">X</text>
+    <!-- Left stick -->
+    <circle cx="172" cy="190" r="32" fill="#0d1820" stroke="#1a2535" stroke-width="1"/>
+    <circle cx="172" cy="190" r="20" fill="#1e3040" id="svg-ls"/>
+    <!-- Right stick -->
+    <circle cx="304" cy="222" r="32" fill="#0d1820" stroke="#1a2535" stroke-width="1"/>
+    <circle cx="304" cy="222" r="20" fill="#1e3040" id="svg-rs"/>
+    <!-- D-Pad -->
+    <g transform="translate(222,213)">
+      <rect x="-8" y="-24" width="16" height="48" rx="3" fill="#0d1820" stroke="#1a2535" stroke-width="1"/>
+      <rect x="-24" y="-8" width="48" height="16" rx="3" fill="#0d1820" stroke="#1a2535" stroke-width="1"/>
+      <circle cx="0" cy="0" r="5" fill="#131d26"/>
+    </g>
+    <!-- Face buttons -->
+    <circle cx="362" cy="168" r="13" fill="#162030" stroke="#1a2535" stroke-width="1" id="svg-b"/><text x="362" y="173" text-anchor="middle" fill="#2d6040" font-size="11" font-family="monospace">B</text>
+    <circle cx="340" cy="190" r="13" fill="#162030" stroke="#1a2535" stroke-width="1" id="svg-x"/><text x="340" y="195" text-anchor="middle" fill="#204060" font-size="11" font-family="monospace">X</text>
+    <circle cx="384" cy="190" r="13" fill="#162030" stroke="#1a2535" stroke-width="1" id="svg-a"/><text x="384" y="195" text-anchor="middle" fill="#204060" font-size="11" font-family="monospace">A</text>
+    <circle cx="362" cy="212" r="13" fill="#162030" stroke="#1a2535" stroke-width="1" id="svg-y"/><text x="362" y="217" text-anchor="middle" fill="#504020" font-size="11" font-family="monospace">Y</text>
+    <!-- Bumpers -->
+    <path d="M96,96 C96,80 138,68 172,68 L182,86 C152,86 112,92 104,106Z" fill="#1a2d3e" stroke="#253545" stroke-width="1" id="svg-lb"/>
+    <path d="M424,96 C424,80 382,68 348,68 L338,86 C368,86 408,92 416,106Z" fill="#1a2d3e" stroke="#253545" stroke-width="1" id="svg-rb"/>
+    <!-- Triggers -->
+    <path d="M78,82 C78,64 118,50 170,52 L175,70 C132,68 98,78 96,96Z" fill="#131d26" stroke="#1a2535" stroke-width="1" id="svg-lt"/>
+    <path d="M442,82 C442,64 402,50 350,52 L345,70 C388,68 422,78 424,96Z" fill="#131d26" stroke="#1a2535" stroke-width="1" id="svg-rt"/>
+    <!-- View/Menu -->
+    <rect x="226" y="178" width="20" height="12" rx="6" fill="#162030" id="svg-view"/>
+    <rect x="274" y="178" width="20" height="12" rx="6" fill="#162030" id="svg-menu"/>
+    <text x="236" y="187" text-anchor="middle" fill="#253545" font-size="7" font-family="monospace">VW</text>
+    <text x="284" y="187" text-anchor="middle" fill="#253545" font-size="7" font-family="monospace">MN</text>
+    <text x="104" y="90" fill="#253545" font-size="9" font-family="monospace">LB</text>
+    <text x="408" y="90" fill="#253545" font-size="9" font-family="monospace">RB</text>
+    <text x="85" y="76" fill="#253545" font-size="8" font-family="monospace">LT</text>
+    <text x="425" y="76" fill="#253545" font-size="8" font-family="monospace">RT</text>
+  </svg>`;
+}
+
+function svgPS() {
+  return `<svg viewBox="0 0 520 320" xmlns="http://www.w3.org/2000/svg">
+    <defs><radialGradient id="pgrad" cx="50%" cy="25%"><stop offset="0%" stop-color="#1a2030"/><stop offset="100%" stop-color="#0c1018"/></radialGradient></defs>
+    <path d="M150,88 C78,88 26,152 26,225 C26,274 68,300 108,300 C140,300 164,283 182,260 L338,260 C356,283 380,300 412,300 C452,300 494,274 494,225 C494,152 442,88 370,88 C336,88 304,104 282,126 C268,138 260,144 260,144 C260,144 252,138 238,126 C216,104 184,88 150,88Z" fill="url(#pgrad)" stroke="#202535" stroke-width="1.5"/>
+    <ellipse cx="152" cy="268" rx="62" ry="40" fill="#0a0e18" stroke="#181f2e" stroke-width="1"/>
+    <ellipse cx="368" cy="268" rx="62" ry="40" fill="#0a0e18" stroke="#181f2e" stroke-width="1"/>
+    <!-- Touchpad -->
+    <rect x="200" y="145" width="120" height="76" rx="8" fill="#0d121e" stroke="#181f2e" stroke-width="1.5" id="svg-tp"/>
+    <!-- L stick -->
+    <circle cx="170" cy="218" r="32" fill="#0d121e" stroke="#181f2e" stroke-width="1"/>
+    <circle cx="170" cy="218" r="20" fill="#1a2235" id="svg-ls"/>
+    <!-- R stick -->
+    <circle cx="306" cy="218" r="32" fill="#0d121e" stroke="#181f2e" stroke-width="1"/>
+    <circle cx="306" cy="218" r="20" fill="#1a2235" id="svg-rs"/>
+    <!-- D-pad -->
+    <g transform="translate(222,205)">
+      <rect x="-8" y="-22" width="16" height="44" rx="3" fill="#0d121e" stroke="#181f2e" stroke-width="1"/>
+      <rect x="-22" y="-8" width="44" height="16" rx="3" fill="#0d121e" stroke="#181f2e" stroke-width="1"/>
+      <circle cx="0" cy="0" r="4" fill="#0a0e18"/>
+    </g>
+    <!-- Face buttons -->
+    <circle cx="362" cy="157" r="13" fill="#14192a" stroke="#181f2e" stroke-width="1" id="svg-tri"/><text x="362" y="162" text-anchor="middle" fill="#2a5040" font-size="12">△</text>
+    <circle cx="340" cy="178" r="13" fill="#14192a" stroke="#181f2e" stroke-width="1" id="svg-sq"/><text x="340" y="183" text-anchor="middle" fill="#403060" font-size="12">□</text>
+    <circle cx="384" cy="178" r="13" fill="#14192a" stroke="#181f2e" stroke-width="1" id="svg-ci"/><text x="384" y="183" text-anchor="middle" fill="#502020" font-size="12">○</text>
+    <circle cx="362" cy="199" r="13" fill="#14192a" stroke="#181f2e" stroke-width="1" id="svg-cr"/><text x="362" y="204" text-anchor="middle" fill="#202050" font-size="12">✕</text>
+    <!-- L1/R1 -->
+    <path d="M88,90 C88,74 134,60 170,60 L176,78 C144,78 106,86 100,100Z" fill="#14192a" stroke="#181f2e" stroke-width="1" id="svg-l1"/>
+    <path d="M432,90 C432,74 386,60 350,60 L344,78 C376,78 414,86 420,100Z" fill="#14192a" stroke="#181f2e" stroke-width="1" id="svg-r1"/>
+    <!-- L2/R2 -->
+    <path d="M72,76 C72,58 114,44 166,46 L172,64 C126,62 92,72 90,90Z" fill="#0d121e" stroke="#181f2e" stroke-width="1" id="svg-l2"/>
+    <path d="M448,76 C448,58 406,44 354,46 L348,64 C394,62 428,72 430,90Z" fill="#0d121e" stroke="#181f2e" stroke-width="1" id="svg-r2"/>
+    <!-- Share / Options -->
+    <circle cx="228" cy="168" r="10" fill="#0d121e" stroke="#181f2e" stroke-width="1" id="svg-share"/>
+    <circle cx="292" cy="168" r="10" fill="#0d121e" stroke="#181f2e" stroke-width="1" id="svg-opts"/>
+    <text x="228" y="172" text-anchor="middle" fill="#252f44" font-size="7" font-family="monospace">SH</text>
+    <text x="292" y="172" text-anchor="middle" fill="#252f44" font-size="7" font-family="monospace">OP</text>
+    <!-- PS button -->
+    <circle cx="260" cy="140" r="11" fill="#0d121e" stroke="#181f2e" stroke-width="1" id="svg-ps"/>
+    <text x="260" y="144" text-anchor="middle" fill="#2a3a5a" font-size="9" font-family="monospace">PS</text>
+    <text x="100" y="87" fill="#252f44" font-size="8" font-family="monospace">L1</text>
+    <text x="414" y="87" fill="#252f44" font-size="8" font-family="monospace">R1</text>
+    <text x="78" y="71" fill="#252f44" font-size="8" font-family="monospace">L2</text>
+    <text x="432" y="71" fill="#252f44" font-size="8" font-family="monospace">R2</text>
+  </svg>`;
+}
+
+function svgSwitch() {
+  return `<svg viewBox="0 0 520 320" xmlns="http://www.w3.org/2000/svg">
+    <!-- Left JC -->
+    <rect x="16" y="55" width="108" height="226" rx="32" fill="#1a2030" stroke="#202535" stroke-width="1.5"/>
+    <!-- Right JC -->
+    <rect x="396" y="55" width="108" height="226" rx="32" fill="#1a1520" stroke="#25202a" stroke-width="1.5"/>
+    <!-- Center -->
+    <rect x="124" y="72" width="272" height="200" rx="6" fill="#141820" stroke="#202535" stroke-width="1"/>
+    <!-- Screen -->
+    <rect x="134" y="82" width="252" height="180" rx="5" fill="#080c10" stroke="#181f2e" stroke-width="1"/>
+    <!-- L stick -->
+    <circle cx="78" cy="132" r="28" fill="#0d121e" stroke="#181f2e" stroke-width="1.5"/>
+    <circle cx="78" cy="132" r="18" fill="#1a2235" id="svg-ls"/>
+    <!-- R stick -->
+    <circle cx="442" cy="192" r="28" fill="#0d1218" stroke="#1e1a25" stroke-width="1.5"/>
+    <circle cx="442" cy="192" r="18" fill="#1e1a28" id="svg-rs"/>
+    <!-- D-pad -->
+    <g transform="translate(74,216)">
+      <rect x="-9" y="-22" width="18" height="44" rx="3" fill="#0d121e" stroke="#181f2e" stroke-width="1"/>
+      <rect x="-22" y="-9" width="44" height="18" rx="3" fill="#0d121e" stroke="#181f2e" stroke-width="1"/>
+      <circle cx="0" cy="0" r="5" fill="#0a0e18"/>
+    </g>
+    <!-- Buttons -->
+    <circle cx="448" cy="128" r="12" fill="#14121e" stroke="#1e1a25" stroke-width="1" id="svg-x"/><text x="448" y="133" text-anchor="middle" fill="#303060" font-size="11">X</text>
+    <circle cx="426" cy="150" r="12" fill="#14121e" stroke="#1e1a25" stroke-width="1" id="svg-y"/><text x="426" y="155" text-anchor="middle" fill="#304030" font-size="11">Y</text>
+    <circle cx="470" cy="150" r="12" fill="#14121e" stroke="#1e1a25" stroke-width="1" id="svg-a"/><text x="470" y="155" text-anchor="middle" fill="#503030" font-size="11">A</text>
+    <circle cx="448" cy="172" r="12" fill="#14121e" stroke="#1e1a25" stroke-width="1" id="svg-b"/><text x="448" y="177" text-anchor="middle" fill="#505020" font-size="11">B</text>
+    <!-- − + -->
+    <circle cx="50" cy="93" r="10" fill="#0d121e" stroke="#181f2e" stroke-width="1" id="svg-minus"/>
+    <text x="50" y="97" text-anchor="middle" fill="#252f44" font-size="13">−</text>
+    <circle cx="470" cy="93" r="10" fill="#0d1218" stroke="#1e1a25" stroke-width="1" id="svg-plus"/>
+    <text x="470" y="97" text-anchor="middle" fill="#2a2535" font-size="12">+</text>
+    <!-- Home -->
+    <circle cx="442" cy="248" r="12" fill="#0d1218" stroke="#1e1a25" stroke-width="1" id="svg-home"/>
+    <text x="442" y="252" text-anchor="middle" fill="#2a2535" font-size="10">⌂</text>
+    <!-- Screenshot -->
+    <circle cx="78" cy="196" r="9" fill="#0d121e" stroke="#181f2e" stroke-width="1" id="svg-cap"/>
+    <text x="78" y="200" text-anchor="middle" fill="#252f44" font-size="9">◎</text>
+    <!-- ZL/L/ZR/R -->
+    <rect x="22" y="47" width="88" height="16" rx="4" fill="#1a2030" stroke="#202535" stroke-width="1" id="svg-l"/>
+    <rect x="22" y="29" width="88" height="17" rx="4" fill="#141820" stroke="#202535" stroke-width="1" id="svg-zl"/>
+    <rect x="410" y="47" width="88" height="16" rx="4" fill="#1a1520" stroke="#25202a" stroke-width="1" id="svg-r"/>
+    <rect x="410" y="29" width="88" height="17" rx="4" fill="#14101a" stroke="#25202a" stroke-width="1" id="svg-zr"/>
+    <text x="66" y="59" text-anchor="middle" fill="#252f44" font-size="9" font-family="monospace">L</text>
+    <text x="66" y="41" text-anchor="middle" fill="#252f44" font-size="9" font-family="monospace">ZL</text>
+    <text x="454" y="59" text-anchor="middle" fill="#2a2535" font-size="9" font-family="monospace">R</text>
+    <text x="454" y="41" text-anchor="middle" fill="#2a2535" font-size="9" font-family="monospace">ZR</text>
+  </svg>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  DRAW JOYSTICK 2D
+// ═══════════════════════════════════════════════════════
+function drawStick(canvas, x, y, dz) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2, R = W/2 - 2;
+
+  ctx.clearRect(0,0,W,H);
+
+  // Clip circle
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx,cy,R,0,Math.PI*2);
+  ctx.clip();
+
+  // Grid
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 0.5;
+  for (let i=0;i<4;i++) {
+    ctx.beginPath(); ctx.moveTo(W/4*i,0); ctx.lineTo(W/4*i,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,H/4*i); ctx.lineTo(W,H/4*i); ctx.stroke();
+  }
+
+  // Crosshair
+  ctx.strokeStyle = '#252525';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx,H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,cy); ctx.lineTo(W,cy); ctx.stroke();
+
+  // Deadzone ring
+  if (dz > 0) {
+    ctx.strokeStyle = 'rgba(232,160,32,.2)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, dz * R, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Trace path (store last N points)
+  ctx.restore();
+
+  // Dot
+  const px = cx + x * (R - 4);
+  const py = cy + y * (R - 4);
+  const outside = Math.sqrt(x*x+y*y) > dz;
+
+  ctx.beginPath();
+  ctx.arc(px, py, 6, 0, Math.PI*2);
+  ctx.fillStyle = outside ? '#e8a020' : '#555';
+  ctx.fill();
+
+  // Inner ring
+  ctx.beginPath();
+  ctx.arc(px, py, 9, 0, Math.PI*2);
+  ctx.strokeStyle = outside ? 'rgba(232,160,32,.3)' : 'rgba(80,80,80,.3)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+// ═══════════════════════════════════════════════════════
+//  DRAW AXIS GRAPH
+// ═══════════════════════════════════════════════════════
+function drawAxisGraph(canvas, history, dz, currentVal) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const MID = H / 2;
+  const AMP = (H - 10) / 2;
+
+  ctx.clearRect(0,0,W,H);
+
+  // Background grid
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 1;
+  [-1,-.5,0,.5,1].forEach(v => {
+    const y = MID - v * AMP;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  });
+
+  // Deadzone band
+  if (dz > 0) {
+    ctx.fillStyle = 'rgba(232,160,32,.05)';
+    ctx.fillRect(0, MID - dz*AMP, W, dz*AMP*2);
+  }
+
+  // History line
+  ctx.beginPath();
+  ctx.strokeStyle = '#e8a020';
+  ctx.lineWidth = 1;
+  const step = W / MAX_HIST;
+  for (let i = 0; i < history.length; i++) {
+    const x = i * step;
+    const y = MID - history[i] * AMP;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Current value line
+  ctx.strokeStyle = 'rgba(232,160,32,.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,4]);
+  const curY = MID - currentVal * AMP;
+  ctx.beginPath(); ctx.moveTo(0,curY); ctx.lineTo(W,curY); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ═══════════════════════════════════════════════════════
 //  LOG
-// ─────────────────────────────────────────────
-function addLog(type, msg, label) {
-  const log = document.getElementById('eventLog');
-  if (!log) return;
-  const now = new Date();
-  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}.${String(now.getMilliseconds()).padStart(3,'0')}`;
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML = `<span class="log-time">${ts}</span><span class="log-type ${type}">${label}</span><span class="log-msg">${msg}</span>`;
-  log.insertBefore(entry, log.firstChild);
-  // Keep max 100 entries
-  while (log.children.length > 100) log.removeChild(log.lastChild);
+// ═══════════════════════════════════════════════════════
+function addLog(type, msg, kind, cls) {
+  const body = document.getElementById('logBody');
+  const ts = new Date().toISOString().slice(11,23);
+  const e = document.createElement('div');
+  e.className = 'log-e';
+  e.dataset.type = type;
+  e.innerHTML = `<span class="log-ts">${ts}</span><span class="log-k ${cls}">${kind}</span><span class="log-m">${msg}</span>`;
+  body.insertBefore(e, body.firstChild);
+  while (body.children.length > 200) body.removeChild(body.lastChild);
+  applyLogFilter();
 }
 
 function clearLog() {
-  document.getElementById('eventLog').innerHTML = '';
+  document.getElementById('logBody').innerHTML = '';
 }
 
-// ─────────────────────────────────────────────
-//  START
-// ─────────────────────────────────────────────
-updateSidebar();
-pollLoop();
+// Log filters
+document.querySelectorAll('.lf[data-f]').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.lf[data-f]').forEach(f => f.classList.remove('on'));
+    el.classList.add('on');
+    logFilter = el.dataset.f;
+    applyLogFilter();
+  });
+});
 
-// Detect gamepads that are already connected
-const existing = navigator.getGamepads ? navigator.getGamepads() : [];
-[...existing].filter(Boolean).forEach(gp => {
-  addLog('connect', `Manette déjà connectée: ${gp.id}`, 'SYS');
-  updateSidebar();
-  if (selectedIndex === null) selectController(gp.index);
+function applyLogFilter() {
+  document.querySelectorAll('.log-e[data-type]').forEach(e => {
+    e.style.display = logFilter === 'all' || e.dataset.type === logFilter ? '' : 'none';
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  CALIBRATION
+// ═══════════════════════════════════════════════════════
+document.getElementById('btnCal').addEventListener('click', () => {
+  if (!selIdx !== null || selIdx === null) return;
+  calMode = true;
+  const idx = selIdx;
+  if (!calData[idx]) calData[idx] = { min:{}, max:{}, active:true };
+  calData[idx].active = true;
+  calData[idx].min = {}; calData[idx].max = {};
+  document.getElementById('calBanner').classList.add('on');
+  document.getElementById('cal-status-txt').textContent = 'En cours…';
+  document.getElementById('cal-status-txt').className = 'cm am';
+  addLog('sys', 'Calibration démarrée', 'CAL', 'ks');
+});
+
+document.getElementById('calEnd').addEventListener('click', () => {
+  calMode = false;
+  if (selIdx !== null && calData[selIdx]) calData[selIdx].active = false;
+  document.getElementById('calBanner').classList.remove('on');
+  document.getElementById('cal-status-txt').textContent = 'Calibré ✓';
+  document.getElementById('cal-status-txt').className = 'cm tl';
+  addLog('sys', 'Calibration terminée', 'CAL', 'ks');
+  const gp = navigator.getGamepads()[selIdx];
+  if (gp) buildCalTable(gp);
+});
+
+// ═══════════════════════════════════════════════════════
+//  RECORDING
+// ═══════════════════════════════════════════════════════
+document.getElementById('btnRec').addEventListener('click', () => {
+  isRec = !isRec;
+  if (isRec) {
+    recData = [];
+    document.getElementById('btnRec').textContent = '⏹ STOP';
+    document.getElementById('rec-dot').classList.add('on');
+    document.getElementById('rec-lbl').textContent = 'REC';
+    addLog('sys', 'Enregistrement démarré', 'REC', 'ks');
+  } else {
+    document.getElementById('btnRec').textContent = '⏺ REC';
+    document.getElementById('rec-dot').classList.remove('on');
+    document.getElementById('rec-lbl').textContent = `${recData.length} frames`;
+    addLog('sys', `Enregistrement arrêté — ${recData.length} frames`, 'REC', 'ks');
+  }
+});
+
+// Export
+document.getElementById('btnExport').addEventListener('click', () => {
+  const gp = selIdx !== null ? navigator.getGamepads()[selIdx] : null;
+  const data = {
+    meta: { exportedAt: new Date().toISOString(), tool: 'GamepadLab v2.0' },
+    controller: gp ? {
+      id: gp.id, index: gp.index, buttons: gp.buttons.length,
+      axes: gp.axes.length, mapping: gp.mapping,
+    } : null,
+    calibration: calData[selIdx] || null,
+    deadzone: dzVals[selIdx] || null,
+    recording: recData.slice(0, 500),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `gamepadlab-${Date.now()}.json`;
+  a.click();
+  addLog('sys', 'Données exportées en JSON', 'EXPORT', 'ks');
+});
+
+// ═══════════════════════════════════════════════════════
+//  POLL LOOP
+// ═══════════════════════════════════════════════════════
+function poll() {
+  rafId = requestAnimationFrame(poll);
+  pollCnt++;
+  const now = Date.now();
+  if (now - lastFps >= 1000) {
+    fps = pollCnt; pollCnt = 0; lastFps = now;
+    document.getElementById('sb-fps').textContent = fps;
+    document.getElementById('sb-fps').className = 'sb-v ' + (fps >= 55 ? 'g' : fps >= 30 ? 'w' : 'b');
+  }
+
+  if (selIdx === null) return;
+  const gp = navigator.getGamepads()[selIdx];
+  if (!gp) return;
+
+  const idx = selIdx;
+  const tab = currentTab();
+  const names = getBtnNames(gp.id);
+  const dz = dzVals[idx] || {};
+
+  // ── AXES ──────────────────────────
+  const driftAxes = [];
+  gp.axes.forEach((rawVal, i) => {
+    const dzv = dz[i] !== undefined ? dz[i] : 0.05;
+    const val = Math.abs(rawVal) < dzv ? 0 : rawVal;
+
+    // History
+    if (!axHist[idx][i]) axHist[idx][i] = new Float32Array(MAX_HIST);
+    const h = axHist[idx][i];
+    h.copyWithin(0, 1);
+    h[MAX_HIST - 1] = val;
+
+    // Calibration
+    if (calMode && calData[idx]?.active) {
+      calData[idx].min[i] = Math.min(calData[idx].min[i] ?? rawVal, rawVal);
+      calData[idx].max[i] = Math.max(calData[idx].max[i] ?? rawVal, rawVal);
+    }
+
+    // Drift detection (if value > threshold at rest = not pressed)
+    if (Math.abs(rawVal) > 0.08 && !gp.buttons[10]?.pressed && !gp.buttons[11]?.pressed) {
+      if ((i === 0 || i === 1 || i === 2 || i === 3)) {
+        if (gp.buttons.every(b => !b.pressed)) driftAxes.push(i);
+      }
+    }
+
+    // Axis log
+    const prev = prevAxes[i] !== undefined ? prevAxes[i] : 0;
+    if (Math.abs(val - prev) > 0.15) {
+      prevAxes[i] = val;
+      addLog('axis', `Axis ${i} → ${val.toFixed(3)}`, 'AXIS', 'ka');
+    }
+
+    // Overview quick axes
+    const avEl = document.getElementById(`ov-av-${i}`);
+    const afEl = document.getElementById(`ov-af-${i}`);
+    const dzEl = document.getElementById(`ov-dz-${i}`);
+    if (avEl) {
+      avEl.textContent = val.toFixed(3);
+      avEl.style.color = Math.abs(val) > 0.1 ? 'var(--am)' : 'var(--t2)';
+    }
+    if (afEl) {
+      if (val >= 0) { afEl.style.left = '50%'; afEl.style.width = (val*50)+'%'; }
+      else { afEl.style.left = (50+val*50)+'%'; afEl.style.width = (-val*50)+'%'; }
+    }
+    if (dzEl) {
+      const dzPct = dzv * 50;
+      dzEl.style.left = (50 - dzPct) + '%';
+      dzEl.style.width = (dzPct * 2) + '%';
+    }
+
+    // Sticks tab: axis graph
+    if (tab === 'sticks') {
+      const gc = document.getElementById(`axg-${i}`);
+      if (gc) drawAxisGraph(gc, h, dzv, val);
+      const gv = document.getElementById(`axg-val-${i}`);
+      if (gv) gv.textContent = val.toFixed(3);
+    }
+  });
+
+  // Drift display
+  const driftWarn = document.getElementById('drift-warn');
+  const driftOk   = document.getElementById('drift-ok');
+  if (driftAxes.length) {
+    driftWarn?.classList.add('on');
+    driftOk.style.display = 'none';
+    const el = document.getElementById('drift-axes');
+    if (el) el.textContent = driftAxes.map(i => `AX${i}(${gp.axes[i].toFixed(3)})`).join(' ');
+  } else {
+    driftWarn?.classList.remove('on');
+    if (driftOk) driftOk.style.display = '';
+  }
+
+  // ── JOYSTICKS 2D ──────────────────
+  const numJS = Math.floor(gp.axes.length / 2);
+
+  // Overview sticks
+  for (let i = 0; i < 2; i++) {
+    const c = document.getElementById(`ov-js${i}`);
+    if (c && i < numJS) {
+      const ax = gp.axes[i*2] || 0;
+      const ay = gp.axes[i*2+1] || 0;
+      const dzv = dz[i*2] !== undefined ? dz[i*2] : 0.05;
+      drawStick(c, ax, ay, dzv);
+      const vEl = document.getElementById(`ov-js${i}-val`);
+      if (vEl) vEl.textContent = `X: ${ax.toFixed(3)} · Y: ${ay.toFixed(3)}`;
+    }
+  }
+  document.getElementById('ov-js1-card').style.display = numJS >= 2 ? '' : 'none';
+
+  // Sticks tab
+  if (tab === 'sticks') {
+    for (let i = 0; i < numJS; i++) {
+      const c = document.getElementById(`js2d-${i}`);
+      if (c) {
+        const ax = gp.axes[i*2] || 0, ay = gp.axes[i*2+1] || 0;
+        const dzv = dz[i*2] !== undefined ? dz[i*2] : 0.05;
+        drawStick(c, ax, ay, dzv);
+        const vEl = document.getElementById(`js2d-val-${i}`);
+        if (vEl) vEl.textContent = `X: ${ax.toFixed(3)} · Y: ${ay.toFixed(3)}`;
+      }
+    }
+  }
+
+  // ── BUTTONS ───────────────────────
+  const activeNames = [];
+  gp.buttons.forEach((btn, i) => {
+    const wasPressed = prevBtns[i] || false;
+    const name = names[i] || ('Btn'+i);
+
+    if (btn.pressed !== wasPressed) {
+      if (btn.pressed) {
+        btnTimers[i] = Date.now();
+        addLog('press',   `${name} (idx:${i})`, 'BTN↓', 'kp');
+        // Combo
+        combo.push(name);
+        if (combo.length > 12) combo.shift();
+        renderCombo();
+        clearTimeout(comboTimer);
+        comboTimer = setTimeout(() => { combo = []; renderCombo(); }, 4000);
+      } else {
+        const held = btnTimers[i] ? (Date.now() - btnTimers[i]) : 0;
+        addLog('release', `${name} (idx:${i}) — ${held}ms`, 'BTN↑', 'kr');
+        delete btnTimers[i];
+      }
+      prevBtns[i] = btn.pressed;
+    }
+
+    if (btn.pressed) activeNames.push(name);
+
+    // Button tile
+    const tile = document.getElementById(`btile-${i}`);
+    if (tile) {
+      tile.classList.toggle('on', btn.pressed);
+      const fill = document.getElementById(`bfill-${i}`);
+      if (fill) fill.style.width = (btn.value * 100) + '%';
+      const tEl = document.getElementById(`btime-${i}`);
+      if (tEl && btn.pressed && btnTimers[i]) tEl.textContent = (Date.now()-btnTimers[i])+'ms';
+      else if (tEl && !btn.pressed) tEl.textContent = '—';
+    }
+
+    // Mapping table value
+    const mv = document.getElementById(`mval-${i}`);
+    if (mv) mv.textContent = btn.value.toFixed(3);
+
+    // Triggers
+    const tf = document.getElementById(`tfill-${i}`);
+    const tv = document.getElementById(`tval-${i}`);
+    if (tf) tf.style.height = (btn.value * 100) + '%';
+    if (tv) tv.textContent = btn.value.toFixed(3);
+
+    // Trigger curves
+    if (i === 6 || i === 7) {
+      const tc = document.getElementById(`tcurve-${i}`);
+      if (tc) drawTriggerCurve(tc, btn.value);
+    }
+  });
+
+  // Active inputs chips
+  const chips = document.getElementById('ov-chips');
+  if (chips) {
+    chips.innerHTML = activeNames.map(n => `<div class="ai-chip">${n}</div>`).join('');
+  }
+  const ac = document.getElementById('ov-active-count');
+  if (ac) ac.textContent = activeNames.length;
+
+  // Record
+  if (isRec) {
+    recData.push({
+      t: performance.now(),
+      buttons: gp.buttons.map(b => ({ pressed: b.pressed, value: b.value })),
+      axes: [...gp.axes],
+    });
+    if (recData.length > 10000) recData.shift();
+    document.getElementById('rec-lbl').textContent = `REC ${recData.length}fr`;
+  }
+}
+
+function renderCombo() {
+  const el = document.getElementById('ov-combo');
+  if (!el) return;
+  el.innerHTML = combo.map(k => `<div class="combo-key">${k}</div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+refreshTabs();
+poll();
+
+// Check already-connected gamepads
+const existing = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(Boolean);
+existing.forEach(gp => {
+  addLog('sys', `Manette déjà connectée: ${gp.id}`, 'SYS', 'ks');
+  initController(gp.index);
+  refreshTabs();
+  if (selIdx === null) selectCtrl(gp.index);
 });
 </script>
 </body>
