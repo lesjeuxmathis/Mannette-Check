@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CTRL//DBG — Débogueur de Manettes</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --bg2: #0d1318;
+    --bg3: #111820;
+    --panel: #0f1923;
+    --border: #1e3040;
+    --border2: #243b50;
+    --accent: #00e5ff;
+    --accent2: #00ff88;
+    --accent3: #ff3f5b;
+    --accent4: #ffae00;
+    --text: #cde4f0;
+    --text-dim: #4a7a96;
+    --text-muted: #2a4a60;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Barlow Condensed', sans-serif;
+    --glow: 0 0 12px rgba(0,229,255,0.4);
+    --glow2: 0 0 12px rgba(0,255,136,0.4);
+    --glow3: 0 0 12px rgba(255,63,91,0.4);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID BACKGROUND */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* SCANLINE */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  .wrapper { position: relative; z-index: 1; }
+
+  /* HEADER */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    background: rgba(8,12,16,0.9);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 22px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-shadow: var(--glow);
+  }
+  .logo span { color: var(--text-dim); }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    box-shadow: none;
+    transition: all 0.3s;
+    display: inline-block;
+    margin-right: 6px;
+  }
+  .status-dot.active {
+    background: var(--accent2);
+    box-shadow: var(--glow2);
+    animation: blink 1.5s infinite;
+  }
+
+  @keyframes blink {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* MAIN LAYOUT */
+  .main {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: calc(100vh - 64px);
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    background: var(--bg2);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sidebar-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* EMPTY STATE */
+  .no-controller {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+  }
+
+  .plug-icon {
+    font-size: 64px;
+    margin-bottom: 24px;
+    opacity: 0.2;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .no-ctrl-text {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 2;
+  }
+
+  .blink-cursor::after {
+    content: '_';
+    animation: blink 1s infinite;
+  }
+
+  /* CONTROLLER CARD IN SIDEBAR */
+  .ctrl-item {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .ctrl-item:hover {
+    border-color: var(--border2);
+    background: #131f2a;
+  }
+  .ctrl-item.selected {
+    border-color: var(--accent);
+    background: rgba(0,229,255,0.05);
+    box-shadow: inset 0 0 20px rgba(0,229,255,0.05);
+  }
+
+  .ctrl-icon {
+    font-size: 24px;
+    min-width: 30px;
+    text-align: center;
+  }
+
+  .ctrl-info { flex: 1; min-width: 0; }
+
+  .ctrl-name {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .ctrl-id {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .ctrl-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: rgba(0,255,136,0.1);
+    color: var(--accent2);
+    border: 1px solid rgba(0,255,136,0.2);
+  }
+
+  /* CONTENT */
+  .content {
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* SECTION */
+  .section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .section-header {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0,0,0,0.2);
+  }
+
+  .section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .section-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .section-body { padding: 18px; }
+
+  /* CONTROLLER VISUAL */
+  .ctrl-visual-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+    background: radial-gradient(ellipse at center, rgba(0,229,255,0.03) 0%, transparent 70%);
+  }
+
+  /* SVG CONTROLLERS */
+  .ctrl-svg { max-width: 500px; width: 100%; }
+
+  /* BUTTON STATES */
+  .btn-pressed { fill: var(--accent) !important; filter: drop-shadow(0 0 8px var(--accent)); }
+  .btn-axis { fill: var(--accent4) !important; filter: drop-shadow(0 0 6px var(--accent4)); }
+  .btn-default { fill: #1e3040; transition: all 0.1s; }
+
+  /* AXES SECTION */
+  .axes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+
+  .axis-item { }
+
+  .axis-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .axis-val {
+    color: var(--accent);
+    font-size: 12px;
+  }
+
+  .axis-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .axis-fill {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.05s, left 0.05s;
+    box-shadow: 0 0 8px rgba(0,229,255,0.5);
+  }
+
+  .axis-center {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background: var(--border2);
+  }
+
+  /* JOYSTICK VISUALIZER */
+  .joysticks-row {
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .joystick-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .joystick-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  .joystick-canvas {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: var(--bg3);
+    border: 2px solid var(--border2);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .joystick-canvas::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(rgba(0,229,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.05) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .joystick-cross-h, .joystick-cross-v {
+    position: absolute;
+    background: rgba(0,229,255,0.1);
+  }
+  .joystick-cross-h { height: 1px; width: 100%; top: 50%; left: 0; }
+  .joystick-cross-v { width: 1px; height: 100%; left: 50%; top: 0; }
+
+  .joystick-dot {
+    position: absolute;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 15px var(--accent), 0 0 30px rgba(0,229,255,0.3);
+    transform: translate(-50%, -50%);
+    left: 50%; top: 50%;
+    transition: left 0.03s, top 0.03s;
+  }
+
+  .js-coords {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  /* BUTTONS GRID */
+  .buttons-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 10px;
+  }
+
+  .btn-tile {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 8px;
+    text-align: center;
+    transition: all 0.08s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .btn-tile.active {
+    background: rgba(0,229,255,0.1);
+    border-color: var(--accent);
+    box-shadow: 0 0 15px rgba(0,229,255,0.2), inset 0 0 15px rgba(0,229,255,0.05);
+  }
+
+  .btn-tile.active .btn-num { color: var(--accent); }
+
+  .btn-num {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+
+  .btn-name {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  .btn-tile.active .btn-name { color: var(--text); }
+
+  .btn-pressure {
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .btn-pressure-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.05s;
+  }
+
+  /* INFO ROW */
+  .info-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+  }
+
+  .info-item {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px;
+  }
+
+  .info-key {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .info-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    word-break: break-all;
+  }
+
+  /* EVENTS LOG */
+  .log-container {
+    height: 160px;
+    overflow-y: auto;
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    border: 1px solid var(--border);
+  }
+
+  .log-entry {
+    display: flex;
+    gap: 12px;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(30,48,64,0.3);
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-5px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .log-time { color: var(--text-muted); min-width: 80px; }
+  .log-type { min-width: 70px; }
+  .log-type.press { color: var(--accent2); }
+  .log-type.release { color: var(--accent3); }
+  .log-type.axis { color: var(--accent4); }
+  .log-type.connect { color: var(--accent); }
+  .log-msg { color: var(--text-dim); }
+
+  /* WELCOME / NO SELECTION */
+  .welcome {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 16px;
+    padding: 60px;
+  }
+
+  .welcome h1 {
+    font-family: var(--sans);
+    font-size: 64px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    line-height: 1;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .welcome p {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-muted);
+    max-width: 440px;
+    line-height: 2;
+  }
+
+  .instructions {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    max-width: 480px;
+  }
+
+  .instr-item {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    text-align: left;
+  }
+
+  .instr-icon { font-size: 22px; margin-bottom: 8px; }
+
+  .instr-title {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .instr-desc {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* TRIGGER BARS */
+  .triggers-row {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    margin-top: 10px;
+  }
+
+  .trigger-box { text-align: center; }
+
+  .trigger-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .trigger-bar {
+    width: 50px;
+    height: 140px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    margin: 0 auto;
+  }
+
+  .trigger-fill {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: linear-gradient(to top, var(--accent3), var(--accent4));
+    box-shadow: 0 0 20px rgba(255,63,91,0.4);
+    transition: height 0.05s;
+    border-radius: 2px;
+  }
+
+  .trigger-val {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  /* RUMBLE */
+  .rumble-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .rumble-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 8px 16px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+  }
+
+  .rumble-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: var(--glow);
+  }
+
+  .rumble-slider-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border2);
+    outline: none;
+    width: 100px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: var(--glow);
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+  }
+
+  .corner-decoration {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    opacity: 0.4;
+    z-index: 2;
+  }
+
+  .fps-counter {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .mapping-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .mapping-table th {
+    text-align: left;
+    padding: 6px 10px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .mapping-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(30,48,64,0.3);
+    color: var(--text-dim);
+  }
+  .mapping-table tr:hover td { background: rgba(0,229,255,0.02); }
+  .mapping-table .mapped { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <header>
+    <div class="logo">CTRL<span>//</span>DBG</div>
+    <div class="status-bar">
+      <span><span class="status-dot" id="globalDot"></span><span id="globalStatus">EN ATTENTE</span></span>
+      <span class="fps-counter">POLL: <span id="fpsDisplay">—</span> fps</span>
+      <span id="connCount" style="color:var(--text-muted)">0 manette(s)</span>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-title">// Manettes connectées</div>
+      <div id="ctrlList">
+        <div class="no-controller" id="noCtrlMsg">
+          <div class="plug-icon">🎮</div>
+          <div class="no-ctrl-text">
+            Aucune manette détectée<br>
+            <span class="blink-cursor"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content" id="mainContent">
+      <div class="welcome" id="welcomeScreen">
+        <h1>CTRL//DBG</h1>
+        <p>Débogueur de manettes temps-réel.<br>
+        Compatible Xbox · PlayStation · Joy-Con · Générique</p>
+        <div class="instructions">
+          <div class="instr-item">
+            <div class="instr-icon">🔌</div>
+            <div class="instr-title">Connexion</div>
+            <div class="instr-desc">Branchez votre manette via USB ou Bluetooth, puis appuyez sur un bouton.</div>
+          </div>
+          <div class="instr-item">
+            <div class="instr-icon">🎯</div>
+            <div class="instr-title">Axes</div>
+            <div class="instr-desc">Bougez les joysticks pour visualiser les valeurs en temps-réel.</div>
+          </div>
+          <div class="instr-item">
+            <div class="instr-icon">⚡</div>
+            <div class="instr-title">Boutons</div>
+            <div class="instr-desc">Chaque bouton pressé s'allume instantanément avec sa valeur de pression.</div>
+          </div>
+          <div class="instr-item">
+            <div class="instr-icon">📋</div>
+            <div class="instr-title">Logs</div>
+            <div class="instr-desc">Un journal complet des événements est enregistré en temps-réel.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="ctrlDetail" style="display:none; display: flex; flex-direction: column; gap: 20px;">
+
+        <!-- INFO -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">// Informations</span>
+            <span class="section-meta" id="ctrlType">—</span>
+          </div>
+          <div class="section-body">
+            <div class="info-row" id="infoRow"></div>
+          </div>
+        </div>
+
+        <!-- VISUAL -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">// Vue Manette</span>
+            <span class="section-meta" id="ctrlMapLabel">—</span>
+          </div>
+          <div class="ctrl-visual-container" id="ctrlVisual"></div>
+        </div>
+
+        <!-- JOYSTICKS -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">// Joysticks & Axes</span>
+            <span class="section-meta" id="axesCount">—</span>
+          </div>
+          <div class="section-body">
+            <div class="joysticks-row" id="joysticksRow"></div>
+            <div style="margin-top:20px">
+              <div class="axes-grid" id="axesGrid"></div>
+            </div>
+            <div class="triggers-row" id="triggersRow"></div>
+          </div>
+        </div>
+
+        <!-- BUTTONS -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">// Boutons</span>
+            <span class="section-meta" id="btnsCount">—</span>
+          </div>
+          <div class="section-body">
+            <div class="buttons-grid" id="buttonsGrid"></div>
+          </div>
+        </div>
+
+        <!-- RUMBLE -->
+        <div class="section" id="rumbleSection">
+          <div class="section-header">
+            <span class="section-title">// Vibration (Rumble)</span>
+            <span class="section-meta" id="rumbleStatus">—</span>
+          </div>
+          <div class="section-body">
+            <div class="rumble-controls">
+              <div class="rumble-slider-group">
+                Forte <input type="range" id="strongMag" min="0" max="1" step="0.01" value="0.5"> <span id="strongVal">0.50</span>
+              </div>
+              <div class="rumble-slider-group">
+                Faible <input type="range" id="weakMag" min="0" max="1" step="0.01" value="0.3"> <span id="weakVal">0.30</span>
+              </div>
+              <div class="rumble-slider-group">
+                Durée <input type="range" id="duration" min="50" max="2000" step="50" value="500"> <span id="durVal">500ms</span>
+              </div>
+              <button class="rumble-btn" id="rumbleBtn">▶ VIBRER</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- LOG -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">// Journal d'Événements</span>
+            <button class="rumble-btn" onclick="clearLog()" style="font-size:9px;padding:4px 10px">EFFACER</button>
+          </div>
+          <div class="section-body" style="padding:10px">
+            <div class="log-container" id="eventLog">
+              <div class="log-entry">
+                <span class="log-time">—</span>
+                <span class="log-type connect">SYS</span>
+                <span class="log-msg">Débogueur initialisé. En attente d'une manette…</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <div class="corner-decoration">GAMEPAD API v1.0 // CTRL//DBG</div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  CONTROLLER IDENTIFICATION
+// ─────────────────────────────────────────────
+const CTRL_PROFILES = [
+  { match: /xbox/i,        icon: '🟢', label: 'Xbox',        type: 'Standard (Xbox)',     color: '#107c10' },
+  { match: /xinput/i,      icon: '🟢', label: 'XInput',      type: 'Standard (Xbox)',     color: '#107c10' },
+  { match: /playstation|dualsense|dualshock|ps[345]/i, icon: '🔵', label: 'PlayStation', type: 'DualSense/DualShock', color: '#003087' },
+  { match: /joy.?con|nintendo|pro controller/i, icon: '🔴', label: 'Nintendo', type: 'Nintendo Switch', color: '#e4000f' },
+  { match: /8bitdo/i,      icon: '🟡', label: '8BitDo',      type: '8BitDo',              color: '#d4a000' },
+  { match: /logitech/i,    icon: '🔷', label: 'Logitech',    type: 'Logitech',            color: '#0082c8' },
+  { match: /steam/i,       icon: '⚫', label: 'Steam',       type: 'Steam Controller',    color: '#1b2838' },
+];
+
+function identifyController(id) {
+  for (const p of CTRL_PROFILES) {
+    if (p.match.test(id)) return p;
+  }
+  return { icon: '🎮', label: 'Générique', type: 'Contrôleur Générique', color: '#4a7a96' };
+}
+
+// Standard button mappings
+const BTN_NAMES = {
+  standard: ['A','B','X','Y','LB','RB','LT','RT','Select','Start','L3','R3','↑','↓','←','→','Home','Touch'],
+  xbox:     ['A','B','X','Y','LB','RB','LT','RT','View','Menu','L3','R3','↑','↓','←','→','Xbox','Share'],
+  ps:       ['Croix','Rond','Carré','Triangle','L1','R1','L2','R2','Share','Options','L3','R3','↑','↓','←','→','PS','Touch'],
+  nintendo: ['B','A','Y','X','L','R','ZL','ZR','−','+','L-Stick','R-Stick','↑','↓','←','→','Home','Cap'],
+};
+
+function getBtnNames(profile) {
+  if (!profile) return BTN_NAMES.standard;
+  if (/xbox/i.test(profile.type)) return BTN_NAMES.xbox;
+  if (/playstation|dual/i.test(profile.type)) return BTN_NAMES.ps;
+  if (/nintendo|switch|joy/i.test(profile.type)) return BTN_NAMES.nintendo;
+  return BTN_NAMES.standard;
+}
+
+// ─────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────
+let selectedIndex = null;
+let animId = null;
+let prevButtons = {};
+let prevAxes = {};
+let pollCount = 0;
+let lastFpsTick = Date.now();
+let currentFps = 0;
+
+// ─────────────────────────────────────────────
+//  GAMEPAD EVENTS
+// ─────────────────────────────────────────────
+window.addEventListener('gamepadconnected', (e) => {
+  addLog('connect', `Manette connectée: ${e.gamepad.id}`, 'SYS');
+  updateSidebar();
+  if (selectedIndex === null) selectController(e.gamepad.index);
+});
+
+window.addEventListener('gamepaddisconnected', (e) => {
+  addLog('connect', `Manette déconnectée: Index ${e.gamepad.index}`, 'SYS');
+  if (selectedIndex === e.gamepad.index) {
+    selectedIndex = null;
+    document.getElementById('ctrlDetail').style.display = 'none';
+    document.getElementById('welcomeScreen').style.display = 'flex';
+  }
+  updateSidebar();
+});
+
+// ─────────────────────────────────────────────
+//  SIDEBAR
+// ─────────────────────────────────────────────
+function updateSidebar() {
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const list = document.getElementById('ctrlList');
+  const noMsg = document.getElementById('noCtrlMsg');
+  const dot = document.getElementById('globalDot');
+  const status = document.getElementById('globalStatus');
+  const countEl = document.getElementById('connCount');
+
+  const connected = [...gamepads].filter(Boolean);
+  countEl.textContent = `${connected.length} manette(s)`;
+
+  if (connected.length === 0) {
+    noMsg.style.display = 'flex';
+    dot.classList.remove('active');
+    status.textContent = 'EN ATTENTE';
+  } else {
+    noMsg.style.display = 'none';
+    dot.classList.add('active');
+    status.textContent = 'CONNECTÉ';
+  }
+
+  // Remove old items (not the no-ctrl msg)
+  [...list.querySelectorAll('.ctrl-item')].forEach(el => el.remove());
+
+  connected.forEach(gp => {
+    const prof = identifyController(gp.id);
+    const item = document.createElement('div');
+    item.className = 'ctrl-item' + (selectedIndex === gp.index ? ' selected' : '');
+    item.dataset.index = gp.index;
+    item.innerHTML = `
+      <div class="ctrl-icon">${prof.icon}</div>
+      <div class="ctrl-info">
+        <div class="ctrl-name">${prof.label}</div>
+        <div class="ctrl-id">#${gp.index} · ${gp.buttons.length}btn · ${gp.axes.length}axes</div>
+      </div>
+      <div class="ctrl-badge">LIVE</div>
+    `;
+    item.addEventListener('click', () => selectController(gp.index));
+    list.appendChild(item);
+  });
+}
+
+// ─────────────────────────────────────────────
+//  SELECT CONTROLLER
+// ─────────────────────────────────────────────
+function selectController(index) {
+  selectedIndex = index;
+  prevButtons = {};
+  prevAxes = {};
+  updateSidebar();
+
+  const gp = navigator.getGamepads()[index];
+  if (!gp) return;
+
+  const prof = identifyController(gp.id);
+
+  document.getElementById('welcomeScreen').style.display = 'none';
+  const detail = document.getElementById('ctrlDetail');
+  detail.style.display = 'flex';
+
+  // Info
+  document.getElementById('ctrlType').textContent = prof.type;
+  document.getElementById('infoRow').innerHTML = `
+    <div class="info-item"><div class="info-key">ID</div><div class="info-value" style="font-size:10px">${gp.id}</div></div>
+    <div class="info-item"><div class="info-key">Index</div><div class="info-value">${gp.index}</div></div>
+    <div class="info-item"><div class="info-key">Mapping</div><div class="info-value">${gp.mapping || 'none'}</div></div>
+    <div class="info-item"><div class="info-key">Boutons</div><div class="info-value">${gp.buttons.length}</div></div>
+    <div class="info-item"><div class="info-key">Axes</div><div class="info-value">${gp.axes.length}</div></div>
+    <div class="info-item"><div class="info-key">Vibration</div><div class="info-value">${gp.vibrationActuator ? '✓ OUI' : '✗ NON'}</div></div>
+  `;
+
+  document.getElementById('ctrlMapLabel').textContent = prof.type;
+
+  // Visual
+  renderControllerVisual(gp, prof);
+
+  // Joysticks
+  renderJoysticks(gp);
+
+  // Axes bars
+  renderAxesBars(gp);
+
+  // Triggers
+  renderTriggers(gp);
+
+  // Buttons
+  renderButtonsGrid(gp, prof);
+
+  // Rumble
+  const rumbleStatus = document.getElementById('rumbleStatus');
+  rumbleStatus.textContent = gp.vibrationActuator ? 'Supporté' : 'Non supporté';
+
+  // Rumble sliders
+  document.getElementById('strongMag').oninput = function() {
+    document.getElementById('strongVal').textContent = parseFloat(this.value).toFixed(2);
+  };
+  document.getElementById('weakMag').oninput = function() {
+    document.getElementById('weakVal').textContent = parseFloat(this.value).toFixed(2);
+  };
+  document.getElementById('duration').oninput = function() {
+    document.getElementById('durVal').textContent = this.value + 'ms';
+  };
+
+  document.getElementById('rumbleBtn').onclick = () => {
+    const gp2 = navigator.getGamepads()[selectedIndex];
+    if (gp2?.vibrationActuator) {
+      gp2.vibrationActuator.playEffect('dual-rumble', {
+        startDelay: 0,
+        duration: parseInt(document.getElementById('duration').value),
+        weakMagnitude: parseFloat(document.getElementById('weakMag').value),
+        strongMagnitude: parseFloat(document.getElementById('strongMag').value),
+      });
+      addLog('axis', 'Vibration déclenchée', 'RUMBLE');
+    } else {
+      addLog('release', 'Vibration non supportée', 'RUMBLE');
+    }
+  };
+}
+
+// ─────────────────────────────────────────────
+//  CONTROLLER VISUAL SVG
+// ─────────────────────────────────────────────
+function renderControllerVisual(gp, prof) {
+  const container = document.getElementById('ctrlVisual');
+  const isPS = /playstation|dual/i.test(prof.type);
+  const isNintendo = /nintendo|switch|joy/i.test(prof.type);
+
+  if (isPS) {
+    container.innerHTML = buildDualSenseSVG();
+  } else if (isNintendo) {
+    container.innerHTML = buildSwitchSVG();
+  } else {
+    container.innerHTML = buildXboxSVG();
+  }
+}
+
+function buildXboxSVG() {
+  return `<svg class="ctrl-svg" viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg">
+    <!-- Body -->
+    <path d="M130,100 C60,100 30,160 30,220 C30,270 70,295 110,295 C140,295 160,280 175,260 L325,260 C340,280 360,295 390,295 C430,295 470,270 470,220 C470,160 440,100 370,100 C340,100 310,110 285,130 C270,140 250,145 250,145 C250,145 230,140 215,130 C190,110 160,100 130,100Z" fill="#1a2a38" stroke="#243b50" stroke-width="2"/>
+    <!-- Grips -->
+    <ellipse cx="140" cy="260" rx="55" ry="40" fill="#162230" stroke="#1e3040" stroke-width="1.5"/>
+    <ellipse cx="360" cy="260" rx="55" ry="40" fill="#162230" stroke="#1e3040" stroke-width="1.5"/>
+    <!-- Center guide button -->
+    <circle cx="250" cy="150" r="22" fill="#0f1923" stroke="#243b50" stroke-width="2"/>
+    <circle cx="250" cy="150" r="15" fill="#1a2a38" id="vs-home"/>
+    <text x="250" y="155" text-anchor="middle" fill="#4a7a96" font-size="12" font-family="monospace">X</text>
+    <!-- Left stick area -->
+    <circle cx="165" cy="185" r="30" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
+    <circle cx="165" cy="185" r="18" fill="#243b50" id="vs-ls" class="btn-default"/>
+    <!-- Right stick area -->
+    <circle cx="295" cy="220" r="30" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
+    <circle cx="295" cy="220" r="18" fill="#243b50" id="vs-rs" class="btn-default"/>
+    <!-- DPAD -->
+    <g transform="translate(215,210)">
+      <rect x="-8" y="-22" width="16" height="44" rx="3" fill="#0f1923" id="vs-dpad"/>
+      <rect x="-22" y="-8" width="44" height="16" rx="3" fill="#0f1923"/>
+      <circle cx="0" cy="0" r="5" fill="#162230"/>
+    </g>
+    <!-- Face buttons -->
+    <circle cx="350" cy="165" r="12" fill="#1e3040" id="vs-b" class="btn-default"/><text x="350" y="170" text-anchor="middle" fill="#4a7a96" font-size="11" font-family="monospace">B</text>
+    <circle cx="330" cy="185" r="12" fill="#1e3040" id="vs-x" class="btn-default"/><text x="330" y="190" text-anchor="middle" fill="#4a7a96" font-size="11" font-family="monospace">X</text>
+    <circle cx="370" cy="185" r="12" fill="#1e3040" id="vs-a" class="btn-default"/><text x="370" y="190" text-anchor="middle" fill="#4a7a96" font-size="11" font-family="monospace">A</text>
+    <circle cx="350" cy="205" r="12" fill="#1e3040" id="vs-y" class="btn-default"/><text x="350" y="210" text-anchor="middle" fill="#4a7a96" font-size="11" font-family="monospace">Y</text>
+    <!-- Bumpers -->
+    <path d="M90,100 C90,85 130,75 165,75 L175,90 C150,90 110,95 100,105Z" fill="#1e3040" id="vs-lb" class="btn-default"/>
+    <path d="M410,100 C410,85 370,75 335,75 L325,90 C350,90 390,95 400,105Z" fill="#1e3040" id="vs-rb" class="btn-default"/>
+    <!-- Triggers -->
+    <path d="M75,85 C75,70 110,55 160,58 L165,75 C125,73 95,83 90,100Z" fill="#162230" id="vs-lt" class="btn-default"/>
+    <path d="M425,85 C425,70 390,55 340,58 L335,75 C375,73 405,83 410,100Z" fill="#162230" id="vs-rt" class="btn-default"/>
+    <!-- View/Menu buttons -->
+    <rect x="220" y="175" width="18" height="11" rx="5" fill="#1e3040" id="vs-view" class="btn-default"/>
+    <rect x="262" y="175" width="18" height="11" rx="5" fill="#1e3040" id="vs-menu" class="btn-default"/>
+    <!-- Labels -->
+    <text x="229" y="183" text-anchor="middle" fill="#2a4a60" font-size="7" font-family="monospace">VW</text>
+    <text x="271" y="183" text-anchor="middle" fill="#2a4a60" font-size="7" font-family="monospace">MN</text>
+    <text x="98" y="92" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">LB</text>
+    <text x="402" y="92" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">RB</text>
+    <text x="83" y="78" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">LT</text>
+    <text x="418" y="78" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">RT</text>
+  </svg>`;
+}
+
+function buildDualSenseSVG() {
+  return `<svg class="ctrl-svg" viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg">
+    <!-- Body -->
+    <path d="M140,90 C70,90 25,155 25,225 C25,275 65,300 105,300 C135,300 158,283 175,260 L325,260 C342,283 365,300 395,300 C435,300 475,275 475,225 C475,155 430,90 360,90 C325,90 295,105 275,125 C265,134 250,140 250,140 C250,140 235,134 225,125 C205,105 175,90 140,90Z" fill="#1a2a38" stroke="#243b50" stroke-width="2"/>
+    <!-- PS Grips -->
+    <ellipse cx="145" cy="268" rx="58" ry="38" fill="#13202e" stroke="#1e3040" stroke-width="1.5"/>
+    <ellipse cx="355" cy="268" rx="58" ry="38" fill="#13202e" stroke="#1e3040" stroke-width="1.5"/>
+    <!-- Touchpad -->
+    <rect x="195" y="145" width="110" height="70" rx="8" fill="#0f1923" stroke="#1e3040" stroke-width="2" id="vs-touch"/>
+    <!-- Left stick -->
+    <circle cx="165" cy="215" r="30" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
+    <circle cx="165" cy="215" r="18" fill="#243b50" id="vs-ls" class="btn-default"/>
+    <!-- Right stick -->
+    <circle cx="300" cy="215" r="30" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
+    <circle cx="300" cy="215" r="18" fill="#243b50" id="vs-rs" class="btn-default"/>
+    <!-- DPAD -->
+    <g transform="translate(215,205)">
+      <rect x="-8" y="-22" width="16" height="44" rx="3" fill="#0f1923"/>
+      <rect x="-22" y="-8" width="44" height="16" rx="3" fill="#0f1923"/>
+      <circle cx="0" cy="0" r="5" fill="#162230"/>
+    </g>
+    <!-- Face buttons -->
+    <circle cx="355" cy="155" r="13" fill="#1e3040" id="vs-tri" class="btn-default"/><text x="355" y="160" text-anchor="middle" fill="#4a7a96" font-size="12">△</text>
+    <circle cx="335" cy="175" r="13" fill="#1e3040" id="vs-sq" class="btn-default"/><text x="335" y="180" text-anchor="middle" fill="#4a7a96" font-size="12">□</text>
+    <circle cx="375" cy="175" r="13" fill="#1e3040" id="vs-ci" class="btn-default"/><text x="375" y="180" text-anchor="middle" fill="#4a7a96" font-size="12">○</text>
+    <circle cx="355" cy="195" r="13" fill="#1e3040" id="vs-cr" class="btn-default"/><text x="355" y="200" text-anchor="middle" fill="#4a7a96" font-size="12">✕</text>
+    <!-- L/R bumpers -->
+    <path d="M85,90 C85,75 130,62 165,62 L170,80 C140,80 105,88 100,100Z" fill="#1e3040" id="vs-l1" class="btn-default"/>
+    <path d="M415,90 C415,75 370,62 335,62 L330,80 C360,80 395,88 400,100Z" fill="#1e3040" id="vs-r1" class="btn-default"/>
+    <!-- Triggers -->
+    <path d="M70,78 C70,60 110,45 162,48 L167,64 C122,61 90,72 86,90Z" fill="#162230" id="vs-l2" class="btn-default"/>
+    <path d="M430,78 C430,60 390,45 338,48 L333,64 C378,61 410,72 414,90Z" fill="#162230" id="vs-r2" class="btn-default"/>
+    <!-- Share / Options -->
+    <circle cx="225" cy="168" r="9" fill="#1e3040" id="vs-share" class="btn-default"/>
+    <circle cx="275" cy="168" r="9" fill="#1e3040" id="vs-options" class="btn-default"/>
+    <text x="225" y="172" text-anchor="middle" fill="#2a4a60" font-size="7" font-family="monospace">SH</text>
+    <text x="275" y="172" text-anchor="middle" fill="#2a4a60" font-size="7" font-family="monospace">OP</text>
+    <!-- PS button -->
+    <circle cx="250" cy="138" r="10" fill="#0f1923" stroke="#1e3040" stroke-width="1.5" id="vs-ps"/>
+    <text x="250" y="142" text-anchor="middle" fill="#4a7a96" font-size="9" font-family="monospace">PS</text>
+    <!-- Labels -->
+    <text x="98" y="88" fill="#2a4a60" font-size="8" font-family="monospace">L1</text>
+    <text x="392" y="88" fill="#2a4a60" font-size="8" font-family="monospace">R1</text>
+    <text x="79" y="72" fill="#2a4a60" font-size="8" font-family="monospace">L2</text>
+    <text x="413" y="72" fill="#2a4a60" font-size="8" font-family="monospace">R2</text>
+  </svg>`;
+}
+
+function buildSwitchSVG() {
+  return `<svg class="ctrl-svg" viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg">
+    <!-- Left JoyCon -->
+    <rect x="20" y="60" width="100" height="220" rx="30" fill="#1e2e42" stroke="#243b50" stroke-width="2"/>
+    <!-- Right JoyCon -->
+    <rect x="380" y="60" width="100" height="220" rx="30" fill="#2a1e2a" stroke="#3a2040" stroke-width="2"/>
+    <!-- Center body -->
+    <rect x="120" y="80" width="260" height="190" rx="8" fill="#1a2a38" stroke="#243b50" stroke-width="2"/>
+    <!-- Screen area -->
+    <rect x="130" y="90" width="240" height="170" rx="6" fill="#090d12" stroke="#1e3040" stroke-width="1.5"/>
+    <!-- Left stick -->
+    <circle cx="80" cy="130" r="28" fill="#0f1923" stroke="#1e3040" stroke-width="2"/>
+    <circle cx="80" cy="130" r="17" fill="#243b50" id="vs-ls" class="btn-default"/>
+    <!-- Right stick -->
+    <circle cx="420" cy="180" r="28" fill="#0f1923" stroke="#243040" stroke-width="2"/>
+    <circle cx="420" cy="180" r="17" fill="#33243a" id="vs-rs" class="btn-default"/>
+    <!-- DPAD (Left JoyCon) -->
+    <g transform="translate(75,215)">
+      <rect x="-8" y="-20" width="16" height="40" rx="3" fill="#0f1923"/>
+      <rect x="-20" y="-8" width="40" height="16" rx="3" fill="#0f1923"/>
+      <circle cx="0" cy="0" r="4" fill="#162230"/>
+    </g>
+    <!-- Face buttons (Right) -->
+    <circle cx="430" cy="120" r="12" fill="#1e2838" id="vs-x" class="btn-default"/><text x="430" y="125" text-anchor="middle" fill="#4a7a96" font-size="11">X</text>
+    <circle cx="410" cy="140" r="12" fill="#1e2838" id="vs-y" class="btn-default"/><text x="410" y="145" text-anchor="middle" fill="#4a7a96" font-size="11">Y</text>
+    <circle cx="450" cy="140" r="12" fill="#1e2838" id="vs-a" class="btn-default"/><text x="450" y="145" text-anchor="middle" fill="#4a7a96" font-size="11">A</text>
+    <circle cx="430" cy="160" r="12" fill="#1e2838" id="vs-b" class="btn-default"/><text x="430" y="165" text-anchor="middle" fill="#4a7a96" font-size="11">B</text>
+    <!-- SL/SR Left -->
+    <rect x="15" y="110" width="12" height="30" rx="6" fill="#1e3040" id="vs-sl-l"/>
+    <rect x="15" y="155" width="12" height="30" rx="6" fill="#1e3040" id="vs-sr-l"/>
+    <!-- SL/SR Right -->
+    <rect x="473" y="110" width="12" height="30" rx="6" fill="#2a1a30" id="vs-sl-r"/>
+    <rect x="473" y="155" width="12" height="30" rx="6" fill="#2a1a30" id="vs-sr-r"/>
+    <!-- − + buttons -->
+    <circle cx="50" cy="95" r="9" fill="#0f1923" id="vs-minus" class="btn-default"/>
+    <text x="50" y="99" text-anchor="middle" fill="#2a4a60" font-size="11">−</text>
+    <circle cx="450" cy="95" r="9" fill="#0f1923" id="vs-plus" class="btn-default"/>
+    <text x="450" y="99" text-anchor="middle" fill="#2a4a60" font-size="11">+</text>
+    <!-- Home / Screenshot -->
+    <circle cx="420" cy="235" r="11" fill="#0f1923" id="vs-home"/>
+    <text x="420" y="239" text-anchor="middle" fill="#4a7a96" font-size="9">⌂</text>
+    <circle cx="80" cy="195" r="9" fill="#0f1923" id="vs-cap"/>
+    <text x="80" y="199" text-anchor="middle" fill="#4a7a96" font-size="8">📷</text>
+    <!-- L/ZL (top left) -->
+    <rect x="25" y="52" width="80" height="18" rx="5" fill="#1e3040" id="vs-l"/>
+    <rect x="25" y="33" width="80" height="18" rx="5" fill="#162230" id="vs-zl"/>
+    <text x="65" y="64" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">L</text>
+    <text x="65" y="45" text-anchor="middle" fill="#2a4a60" font-size="9" font-family="monospace">ZL</text>
+    <!-- R/ZR (top right) -->
+    <rect x="395" y="52" width="80" height="18" rx="5" fill="#2a1e30" id="vs-r"/>
+    <rect x="395" y="33" width="80" height="18" rx="5" fill="#201828" id="vs-zr"/>
+    <text x="435" y="64" text-anchor="middle" fill="#3a2a40" font-size="9" font-family="monospace">R</text>
+    <text x="435" y="45" text-anchor="middle" fill="#3a2a40" font-size="9" font-family="monospace">ZR</text>
+  </svg>`;
+}
+
+// ─────────────────────────────────────────────
+//  RENDER JOYSTICKS
+// ─────────────────────────────────────────────
+function renderJoysticks(gp) {
+  const row = document.getElementById('joysticksRow');
+  row.innerHTML = '';
+  const numJoysticks = Math.floor(gp.axes.length / 2);
+  const jsLabels = ['Joystick G.', 'Joystick D.', 'Joystick 3', 'Joystick 4'];
+  for (let i = 0; i < numJoysticks; i++) {
+    const box = document.createElement('div');
+    box.className = 'joystick-box';
+    box.innerHTML = `
+      <div class="joystick-label">${jsLabels[i] || 'JS ' + i}</div>
+      <div class="joystick-canvas" id="js-canvas-${i}">
+        <div class="joystick-cross-h"></div>
+        <div class="joystick-cross-v"></div>
+        <div class="joystick-dot" id="js-dot-${i}"></div>
+      </div>
+      <div class="js-coords" id="js-coords-${i}">X: 0.000 · Y: 0.000</div>
+    `;
+    row.appendChild(box);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  RENDER AXES BARS
+// ─────────────────────────────────────────────
+function renderAxesBars(gp) {
+  const grid = document.getElementById('axesGrid');
+  grid.innerHTML = '';
+  document.getElementById('axesCount').textContent = `${gp.axes.length} axes`;
+
+  gp.axes.forEach((_, i) => {
+    const item = document.createElement('div');
+    item.className = 'axis-item';
+    item.innerHTML = `
+      <div class="axis-label">
+        <span>AXIS ${i}</span>
+        <span class="axis-val" id="axis-val-${i}">0.000</span>
+      </div>
+      <div class="axis-bar">
+        <div class="axis-center"></div>
+        <div class="axis-fill" id="axis-fill-${i}" style="width:0%;left:50%"></div>
+      </div>
+    `;
+    grid.appendChild(item);
+  });
+}
+
+// ─────────────────────────────────────────────
+//  RENDER TRIGGERS
+// ─────────────────────────────────────────────
+function renderTriggers(gp) {
+  const row = document.getElementById('triggersRow');
+  row.innerHTML = '';
+  // Only show if buttons 6 and 7 exist (LT/RT)
+  if (gp.buttons.length >= 8) {
+    const labels = ['LT / L2 / ZL', 'RT / R2 / ZR'];
+    [6, 7].forEach((bi, i) => {
+      const box = document.createElement('div');
+      box.className = 'trigger-box';
+      box.innerHTML = `
+        <div class="trigger-label">${labels[i]}</div>
+        <div class="trigger-bar">
+          <div class="trigger-fill" id="trigger-fill-${bi}" style="height:0%"></div>
+        </div>
+        <div class="trigger-val" id="trigger-val-${bi}">0.00</div>
+      `;
+      row.appendChild(box);
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+//  RENDER BUTTONS GRID
+// ─────────────────────────────────────────────
+function renderButtonsGrid(gp, prof) {
+  const grid = document.getElementById('buttonsGrid');
+  grid.innerHTML = '';
+  document.getElementById('btnsCount').textContent = `${gp.buttons.length} boutons`;
+  const names = getBtnNames(prof);
+
+  gp.buttons.forEach((_, i) => {
+    const tile = document.createElement('div');
+    tile.className = 'btn-tile';
+    tile.id = `btn-tile-${i}`;
+    tile.innerHTML = `
+      <div class="btn-num">BTN ${i}</div>
+      <div class="btn-name">${names[i] || '?'}</div>
+      <div class="btn-pressure"><div class="btn-pressure-fill" id="btn-press-${i}"></div></div>
+    `;
+    grid.appendChild(tile);
+  });
+}
+
+// ─────────────────────────────────────────────
+//  POLL LOOP
+// ─────────────────────────────────────────────
+function pollLoop() {
+  animId = requestAnimationFrame(pollLoop);
+  pollCount++;
+
+  // FPS
+  const now = Date.now();
+  if (now - lastFpsTick >= 1000) {
+    currentFps = pollCount;
+    pollCount = 0;
+    lastFpsTick = now;
+    document.getElementById('fpsDisplay').textContent = currentFps;
+  }
+
+  if (selectedIndex === null) return;
+  const gp = navigator.getGamepads()[selectedIndex];
+  if (!gp) return;
+
+  const prof = identifyController(gp.id);
+  const names = getBtnNames(prof);
+
+  // --- UPDATE BUTTONS ---
+  gp.buttons.forEach((btn, i) => {
+    const tile = document.getElementById(`btn-tile-${i}`);
+    const pressEl = document.getElementById(`btn-press-${i}`);
+    if (!tile) return;
+
+    const wasPressed = prevButtons[i] || false;
+    if (btn.pressed !== wasPressed) {
+      if (btn.pressed) {
+        tile.classList.add('active');
+        addLog('press', `${names[i] || 'Bouton ' + i} (idx:${i})`, 'BTN↓');
+      } else {
+        tile.classList.remove('active');
+        addLog('release', `${names[i] || 'Bouton ' + i} (idx:${i})`, 'BTN↑');
+      }
+      prevButtons[i] = btn.pressed;
+    }
+    if (pressEl) pressEl.style.width = (btn.value * 100) + '%';
+
+    // Triggers
+    const trigFill = document.getElementById(`trigger-fill-${i}`);
+    const trigVal = document.getElementById(`trigger-val-${i}`);
+    if (trigFill) {
+      trigFill.style.height = (btn.value * 100) + '%';
+      trigVal.textContent = btn.value.toFixed(2);
+    }
+  });
+
+  // --- UPDATE AXES ---
+  gp.axes.forEach((val, i) => {
+    const valEl = document.getElementById(`axis-val-${i}`);
+    const fillEl = document.getElementById(`axis-fill-${i}`);
+    if (valEl) valEl.textContent = val.toFixed(3);
+    if (fillEl) {
+      if (val >= 0) {
+        fillEl.style.left = '50%';
+        fillEl.style.width = (val * 50) + '%';
+      } else {
+        fillEl.style.left = (50 + val * 50) + '%';
+        fillEl.style.width = (-val * 50) + '%';
+      }
+    }
+
+    // Log big axis changes
+    const prev = prevAxes[i] !== undefined ? prevAxes[i] : 0;
+    if (Math.abs(val - prev) > 0.1) {
+      prevAxes[i] = val;
+    }
+  });
+
+  // --- UPDATE JOYSTICKS ---
+  const numJS = Math.floor(gp.axes.length / 2);
+  for (let i = 0; i < numJS; i++) {
+    const ax = gp.axes[i * 2] || 0;
+    const ay = gp.axes[i * 2 + 1] || 0;
+    const dot = document.getElementById(`js-dot-${i}`);
+    const coords = document.getElementById(`js-coords-${i}`);
+    if (dot) {
+      dot.style.left = (50 + ax * 42) + '%';
+      dot.style.top = (50 + ay * 42) + '%';
+    }
+    if (coords) {
+      coords.textContent = `X: ${ax.toFixed(3)} · Y: ${ay.toFixed(3)}`;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+//  LOG
+// ─────────────────────────────────────────────
+function addLog(type, msg, label) {
+  const log = document.getElementById('eventLog');
+  if (!log) return;
+  const now = new Date();
+  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}.${String(now.getMilliseconds()).padStart(3,'0')}`;
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${ts}</span><span class="log-type ${type}">${label}</span><span class="log-msg">${msg}</span>`;
+  log.insertBefore(entry, log.firstChild);
+  // Keep max 100 entries
+  while (log.children.length > 100) log.removeChild(log.lastChild);
+}
+
+function clearLog() {
+  document.getElementById('eventLog').innerHTML = '';
+}
+
+// ─────────────────────────────────────────────
+//  START
+// ─────────────────────────────────────────────
+updateSidebar();
+pollLoop();
+
+// Detect gamepads that are already connected
+const existing = navigator.getGamepads ? navigator.getGamepads() : [];
+[...existing].filter(Boolean).forEach(gp => {
+  addLog('connect', `Manette déjà connectée: ${gp.id}`, 'SYS');
+  updateSidebar();
+  if (selectedIndex === null) selectController(gp.index);
+});
+</script>
+</body>
+</html>
